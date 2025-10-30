@@ -1,0 +1,8 @@
+node_modules
+.turbo
+.next
+.env
+.env.local
+
+# Sandbox build artifacts
+packages/sandbox/dist/
