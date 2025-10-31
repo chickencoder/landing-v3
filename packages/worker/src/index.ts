@@ -66,8 +66,14 @@ async function checkDevServer(): Promise<boolean> {
     });
 
     // supervisorctl status output format: "dev-server RUNNING pid 1234, uptime 0:01:23"
-    // Check if output contains "RUNNING"
-    return output.includes("RUNNING");
+    const isRunning = output.includes("RUNNING");
+
+    log("info", "Dev server status check", {
+      output: output.trim(),
+      isRunning,
+    });
+
+    return isRunning;
   } catch (error) {
     log("warn", "Failed to check dev server status", {
       error: error instanceof Error ? error.message : String(error),

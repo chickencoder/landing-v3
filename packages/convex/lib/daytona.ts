@@ -33,7 +33,9 @@ export function buildSandboxImage(): Image {
   const workerUrl = process.env.WORKER_URL;
 
   if (!workerUrl) {
-    throw new Error("WORKER_URL environment variable is required for building sandbox images");
+    throw new Error(
+      "WORKER_URL environment variable is required for building sandbox images",
+    );
   }
 
   console.log(`[DAYTONA] Building image with worker from: ${workerUrl}`);
@@ -46,7 +48,7 @@ export function buildSandboxImage(): Image {
       "npm install -g @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk @anthropic-ai/sdk",
       // Create landing user with home directory
       "useradd -m -d /home/landing -s /bin/bash landing",
-      "VERSION=7",
+      "VERSION=8",
     )
     .dockerfileCommands(["USER landing"])
     .runCommands(
@@ -136,7 +138,7 @@ export async function createSandbox(
   } catch (error) {
     console.error("[DAYTONA] Sandbox creation failed:", {
       error: error instanceof Error ? error.message : String(error),
-      name: error instanceof Error ? error.name : 'Unknown',
+      name: error instanceof Error ? error.name : "Unknown",
     });
     throw error;
   }
