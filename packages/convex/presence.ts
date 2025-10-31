@@ -151,6 +151,18 @@ export const checkSitePresence = internalMutation({
 
     // If no active users and no shutdown scheduled, check worker state before scheduling
     if (activeCount === 0 && !site.scheduledShutdownId) {
+      // Only schedule shutdown if sandbox is actually started (not creating/stopped/etc)
+      if (site.status !== "started") {
+        console.log(
+          "[presence:check] No users but sandbox not in started state, skipping shutdown",
+          {
+            siteId,
+            status: site.status,
+          }
+        );
+        return;
+      }
+
       // Check if worker is streaming or has recent heartbeat
       const workerActive =
         site.worker?.isStreaming ||
@@ -171,6 +183,7 @@ export const checkSitePresence = internalMutation({
 
       console.log("[presence:check] No users active, scheduling shutdown", {
         siteId,
+        status: site.status,
         delay: `${SHUTDOWN_DELAY_MS / 1000}s`,
       });
 
