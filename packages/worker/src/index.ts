@@ -56,48 +56,30 @@ function log(level: "info" | "warn" | "error", message: string, data?: any) {
   }
 }
 
-// Check if dev server process is running via supervisorctl
+// Check if dev server is accepting connections on port 3000
 async function checkDevServer(): Promise<boolean> {
   try {
-    const { execSync } = await import("child_process");
+    const { createConnection } = await import("net");
 
-    // First, try to get all supervisor statuses to see what processes exist
-    let allStatuses = "";
-    try {
-      allStatuses = execSync("supervisorctl status", {
-        encoding: "utf-8",
-        timeout: 5000,
+    return new Promise<boolean>((resolve) => {
+      const socket = createConnection({ port: 3000, host: "localhost" }, () => {
+        socket.end();
+        resolve(true);
       });
-    } catch (e) {
-      // Ignore error, will be logged below
-    }
 
-    // Try to check dev-server specifically
-    const output = execSync("supervisorctl status dev-server", {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      socket.on("error", () => {
+        resolve(false);
+      });
+
+      // Timeout after 2 seconds
+      socket.setTimeout(2000, () => {
+        socket.destroy();
+        resolve(false);
+      });
     });
-
-    // supervisorctl status output format: "dev-server RUNNING pid 1234, uptime 0:01:23"
-    const isRunning = output.includes("RUNNING");
-
-    log("info", "Dev server status check", {
-      output: output.trim(),
-      allStatuses: allStatuses.trim(),
-      isRunning,
-    });
-
-    return isRunning;
   } catch (error) {
-    // Try to get stderr for more details
-    const stderr = (error as any)?.stderr?.toString() || "";
-    const stdout = (error as any)?.stdout?.toString() || "";
-
     log("warn", "Failed to check dev server status", {
       error: error instanceof Error ? error.message : String(error),
-      stderr,
-      stdout,
     });
     return false;
   }
