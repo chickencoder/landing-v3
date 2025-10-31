@@ -10,4 +10,11 @@ crons.interval(
   internal.presence.cleanupStaleUsers
 );
 
+// Clean up stuck worker streaming state every 5 minutes
+crons.interval(
+  "cleanup stuck worker state",
+  { minutes: 5 },
+  internal.presence.cleanupStuckWorkerState
+);
+
 export default crons;

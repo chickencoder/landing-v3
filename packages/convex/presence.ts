@@ -149,8 +149,26 @@ export const checkSitePresence = internalMutation({
       return;
     }
 
-    // If no active users and no shutdown scheduled, schedule one
+    // If no active users and no shutdown scheduled, check worker state before scheduling
     if (activeCount === 0 && !site.scheduledShutdownId) {
+      // Check if worker is streaming or has recent heartbeat
+      const workerActive =
+        site.worker?.isStreaming ||
+        (site.worker?.lastHeartbeat &&
+          now - site.worker.lastHeartbeat < HEARTBEAT_TIMEOUT_MS);
+
+      if (workerActive) {
+        console.log(
+          "[presence:check] No users but worker is active, skipping shutdown",
+          {
+            siteId,
+            workerStreaming: site.worker?.isStreaming,
+            workerLastHeartbeat: site.worker?.lastHeartbeat,
+          }
+        );
+        return;
+      }
+
       console.log("[presence:check] No users active, scheduling shutdown", {
         siteId,
         delay: `${SHUTDOWN_DELAY_MS / 1000}s`,
@@ -202,6 +220,52 @@ export const cleanupStaleUsers = internalMutation({
 
     if (cleaned > 0) {
       console.log("[presence:cleanup] Cleaned stale users", { count: cleaned });
+    }
+  },
+});
+
+/**
+ * Cron job to clean up stuck worker streaming state
+ * Runs every 5 minutes
+ * If a worker is marked as streaming but hasn't sent a heartbeat in >5 minutes, reset the state
+ */
+export const cleanupStuckWorkerState = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const WORKER_STUCK_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+    const allSites = await ctx.db.query("sites").collect();
+    let cleaned = 0;
+
+    for (const site of allSites) {
+      // Check if worker is stuck in streaming state
+      if (
+        site.worker?.isStreaming &&
+        site.worker.lastHeartbeat &&
+        now - site.worker.lastHeartbeat > WORKER_STUCK_THRESHOLD_MS
+      ) {
+        console.log("[presence:cleanup] Resetting stuck worker state", {
+          siteId: site._id,
+          lastHeartbeat: site.worker.lastHeartbeat,
+          age: now - site.worker.lastHeartbeat,
+        });
+
+        await ctx.db.patch(site._id, {
+          worker: {
+            lastHeartbeat: site.worker.lastHeartbeat,
+            isStreaming: false,
+          },
+        });
+
+        cleaned++;
+      }
+    }
+
+    if (cleaned > 0) {
+      console.log("[presence:cleanup] Reset stuck worker states", {
+        count: cleaned,
+      });
     }
   },
 });

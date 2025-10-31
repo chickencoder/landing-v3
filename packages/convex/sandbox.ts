@@ -170,6 +170,29 @@ export const stopSandbox = internalAction({
         return { success: false, reason: "already_stopped" };
       }
 
+      // Safety check: Don't stop if worker is actively streaming
+      if (site.worker?.isStreaming) {
+        console.log("[stopSandbox] Worker is streaming, aborting shutdown", {
+          siteId,
+        });
+        return { success: false, reason: "worker_streaming" };
+      }
+
+      // Safety check: Don't stop if worker heartbeat is recent
+      const now = Date.now();
+      const WORKER_TIMEOUT_MS = 60000; // 60 seconds
+      if (
+        site.worker?.lastHeartbeat &&
+        now - site.worker.lastHeartbeat < WORKER_TIMEOUT_MS
+      ) {
+        console.log("[stopSandbox] Worker heartbeat is recent, aborting shutdown", {
+          siteId,
+          lastHeartbeat: site.worker.lastHeartbeat,
+          age: now - site.worker.lastHeartbeat,
+        });
+        return { success: false, reason: "worker_active" };
+      }
+
       // Stop the sandbox
       await stopSandboxInstance(site.sandboxId);
 

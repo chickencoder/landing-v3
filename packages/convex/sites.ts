@@ -173,3 +173,29 @@ export const clearScheduledShutdown = internalMutation({
     });
   },
 });
+
+// Internal mutation to update worker and dev server state
+export const updateWorkerState = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+    worker: v.optional(
+      v.object({
+        lastHeartbeat: v.number(),
+        isStreaming: v.boolean(),
+      })
+    ),
+    devServer: v.optional(
+      v.object({
+        isRunning: v.boolean(),
+        lastChecked: v.number(),
+      })
+    ),
+  },
+  handler: async (ctx, { siteId, worker, devServer }) => {
+    const updates: any = {};
+    if (worker) updates.worker = worker;
+    if (devServer) updates.devServer = devServer;
+
+    await ctx.db.patch(siteId, updates);
+  },
+});

@@ -38,6 +38,18 @@ export default defineSchema({
     ),
     lastWebhookTimestamp: v.optional(v.string()), // ISO timestamp of last processed webhook
     scheduledShutdownId: v.optional(v.id("_scheduled_functions")), // ID of scheduled shutdown to enable cancellation
+    worker: v.optional(
+      v.object({
+        lastHeartbeat: v.number(),
+        isStreaming: v.boolean(),
+      })
+    ),
+    devServer: v.optional(
+      v.object({
+        isRunning: v.boolean(),
+        lastChecked: v.number(),
+      })
+    ),
   }),
 
   messages: defineTable({

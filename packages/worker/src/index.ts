@@ -56,6 +56,19 @@ function log(level: "info" | "warn" | "error", message: string, data?: any) {
   }
 }
 
+// Check if dev server is running
+async function checkDevServer(): Promise<boolean> {
+  try {
+    const response = await fetch("http://localhost:3000", {
+      method: "HEAD",
+      signal: AbortSignal.timeout(2000),
+    });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+}
+
 // Environment validation
 if (!process.env.CONVEX_URL) {
   log("error", "CONVEX_URL environment variable is required");
@@ -125,6 +138,64 @@ client.setAuth(() => Promise.resolve(clerkToken));
 
 // Wait for client to establish connection
 await new Promise((resolve) => setTimeout(resolve, 1000));
+
+// Start worker heartbeat
+const HEARTBEAT_INTERVAL_MS = 10000; // 10 seconds
+const heartbeatInterval = setInterval(async () => {
+  try {
+    const isDevServerRunning = await checkDevServer();
+    const now = Date.now();
+
+    await client.mutation(api.sites.updateWorkerState, {
+      siteId,
+      worker: {
+        lastHeartbeat: now,
+        isStreaming: streamingState.isStreamingActive,
+      },
+      devServer: {
+        isRunning: isDevServerRunning,
+        lastChecked: now,
+      },
+    });
+
+    log("info", "Worker heartbeat sent", {
+      isStreaming: streamingState.isStreamingActive,
+      devServerRunning: isDevServerRunning,
+    });
+  } catch (error) {
+    log("error", "Failed to send worker heartbeat", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}, HEARTBEAT_INTERVAL_MS);
+
+// Send initial heartbeat immediately
+(async () => {
+  try {
+    const isDevServerRunning = await checkDevServer();
+    const now = Date.now();
+
+    await client.mutation(api.sites.updateWorkerState, {
+      siteId,
+      worker: {
+        lastHeartbeat: now,
+        isStreaming: false,
+      },
+      devServer: {
+        isRunning: isDevServerRunning,
+        lastChecked: now,
+      },
+    });
+
+    log("info", "Initial worker heartbeat sent", {
+      devServerRunning: isDevServerRunning,
+    });
+  } catch (error) {
+    log("error", "Failed to send initial heartbeat", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+})();
 
 interface MessagePart {
   text?: string;
@@ -583,11 +654,40 @@ async function processUserMessage(userMessage: UserMessage | null) {
   }
 }
 
+/**
+ * Check if a user message has been processed by looking for an assistant message after it
+ */
+async function isMessageProcessed(userMessageId: string): Promise<boolean> {
+  try {
+    const allMessages = await client.query(api.messages.getMessagesBySite, {
+      siteId,
+    });
+
+    const userMsgIndex = allMessages.findIndex((m) => m.id === userMessageId);
+    if (userMsgIndex === -1) return false;
+
+    // Check if there's an assistant message after this user message
+    for (let i = userMsgIndex + 1; i < allMessages.length; i++) {
+      if (allMessages[i].role === "assistant") {
+        return true;
+      }
+    }
+
+    return false;
+  } catch (error) {
+    log("error", "Failed to check if message is processed", {
+      userMessageId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 // Subscribe to messages from Convex
 client.onUpdate(
   api.messages.getLatestUserMessage,
   { siteId },
-  (userMessage) => {
+  async (userMessage) => {
     if (userMessage) {
       if (!streamingState.hasInitialized) {
         log("info", "First message received, initializing state", {
@@ -596,7 +696,16 @@ client.onUpdate(
         streamingState.lastSeenMessageId = userMessage.id;
         streamingState.hasInitialized = true;
 
-        // Process the first message immediately instead of marking it as processed
+        // Check if already processed
+        const alreadyProcessed = await isMessageProcessed(userMessage.id);
+        if (alreadyProcessed) {
+          log("info", "First message already processed, skipping", {
+            messageId: userMessage.id,
+          });
+          return;
+        }
+
+        // Process the first message immediately
         processUserMessage(userMessage).catch((error) => {
           log("error", "Error processing first message (will retry)", {
             messageId: userMessage.id,
@@ -606,13 +715,23 @@ client.onUpdate(
         return;
       }
 
-      // Skip if we've already processed this message
+      // Skip if we've already processed this message (in-memory check)
       if (streamingState.processedMessageIds.has(userMessage.id)) {
         return;
       }
 
       // Skip if this is the same message we're currently processing
       if (streamingState.lastSeenMessageId === userMessage.id) {
+        return;
+      }
+
+      // Check database to see if this message has been processed
+      const alreadyProcessed = await isMessageProcessed(userMessage.id);
+      if (alreadyProcessed) {
+        log("info", "Message already processed, skipping", {
+          messageId: userMessage.id,
+        });
+        streamingState.processedMessageIds.add(userMessage.id);
         return;
       }
 
