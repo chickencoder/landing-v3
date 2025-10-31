@@ -11,7 +11,7 @@ export function getDaytonaClient(): Daytona {
 
   if (!apiUrl || !apiKey) {
     throw new Error(
-      "DAYTONA_API_URL and DAYTONA_API_KEY environment variables are required"
+      "DAYTONA_API_URL and DAYTONA_API_KEY environment variables are required",
     );
   }
 
@@ -35,7 +35,8 @@ export function buildSandboxImage(): Image {
       // Install Anthropic packages globally: claude-code (CLI), claude-agent-sdk (SDK), and sdk (API client)
       "npm install -g @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk @anthropic-ai/sdk",
       // Create landing user with home directory
-      "useradd -m -d /home/landing -s /bin/bash landing"
+      "useradd -m -d /home/landing -s /bin/bash landing",
+      "VERSION=2",
     )
     .dockerfileCommands(["USER landing"])
     .runCommands(
@@ -44,7 +45,7 @@ export function buildSandboxImage(): Image {
       // Install project dependencies
       "cd /home/landing/project && npm install",
       // Pre-install worker SDK dependencies in project directory
-      "cd /home/landing/project && npm install --no-save @anthropic-ai/claude-agent-sdk@^0.1.28 @anthropic-ai/sdk@^0.68.0"
+      "cd /home/landing/project && npm install --no-save @anthropic-ai/claude-agent-sdk@^0.1.28 @anthropic-ai/sdk@^0.68.0",
     )
     .workdir("/home/landing/project");
 }
@@ -59,7 +60,7 @@ export async function createSandbox(
     cpu?: number;
     memory?: number;
     disk?: number;
-  }
+  },
 ) {
   const daytona = getDaytonaClient();
 
@@ -74,7 +75,7 @@ export async function createSandbox(
         disk: options?.disk || 10,
       },
     },
-    { timeout: 0 }
+    { timeout: 0 },
   );
 
   console.log("[DAYTONA] Sandbox created:", {
@@ -97,12 +98,12 @@ export async function cloneStarterRepo(sandboxId: string) {
 
   // Clone the starter repository
   await sandbox.process.executeCommand(
-    "git clone https://github.com/chickencoder/landing-starter /home/landing/project"
+    "git clone https://github.com/chickencoder/landing-starter /home/landing/project",
   );
 
   // Install dependencies
   await sandbox.process.executeCommand(
-    "cd /home/landing/project && npm install 2>&1"
+    "cd /home/landing/project && npm install 2>&1",
   );
 
   return { success: true };
@@ -157,7 +158,7 @@ export async function startDevServer(sandboxId: string) {
  */
 export async function uploadAndStartWorker(
   sandboxId: string,
-  workerSource: string
+  workerSource: string,
 ) {
   const daytona = getDaytonaClient();
   const sandbox = await daytona.findOne({ id: sandboxId });
@@ -169,11 +170,11 @@ export async function uploadAndStartWorker(
   // Upload worker file
   await sandbox.fs.uploadFile(
     Buffer.from(workerSource, "utf-8"),
-    "/home/landing/project/worker.js"
+    "/home/landing/project/worker.js",
   );
 
   await sandbox.process.executeCommand(
-    "chmod +x /home/landing/project/worker.js"
+    "chmod +x /home/landing/project/worker.js",
   );
 
   // Create Daytona session for the worker process
@@ -209,7 +210,7 @@ export async function getWorkerLogs(sandboxId: string) {
 
   try {
     const logBuffer = await sandbox.fs.downloadFile(
-      "/home/landing/project/worker.log"
+      "/home/landing/project/worker.log",
     );
     const logText = logBuffer.toString("utf-8");
 

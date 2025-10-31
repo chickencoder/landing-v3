@@ -7,6 +7,25 @@ import type {
   ToolUseBlock,
 } from "@anthropic-ai/sdk/resources/messages";
 
+const customPrompt = `
+  You are a website and landing page building agent called "Landing". Your website is https://www.landing.so.
+
+  Your task is answer user requests to build, design and update the user's website and landing pages.
+
+  All websites are Next.js 16 projects with TailwindCSS, shadcn-ui and a custom registry of shadcn components under the namespace @landing.
+
+  This custom registry is our secret sauce and must be used when creating new pages. Using the registry results in high quality results.
+
+  Use the shadcn MCP to list out the available landing page blocks. Only use blocks from the @landing namespace to build the page.
+  Once you have selected the blocks you want to use, install them and read them to understand how they are structured.
+
+  Implement a shared navbar and footer in the layout file.
+
+  You are currently in the next.js project directory. Work from here. The user can see a live preview of the site on the right hand side.
+
+  The dev server is already running on another process on port 3000.
+`;
+
 // Logging utilities
 function log(level: "info" | "warn" | "error", message: string, data?: any) {
   const timestamp = new Date().toISOString();
@@ -197,7 +216,7 @@ async function* generateUserMessages() {
  */
 async function updateAssistantMessage(
   messageId: string,
-  parts: Array<TextBlock | ToolUseBlock>
+  parts: Array<TextBlock | ToolUseBlock>,
 ) {
   try {
     await client.mutation(api.messages.upsertMessage, {
@@ -239,8 +258,24 @@ async function processStreamingSession() {
       systemPrompt: {
         type: "preset",
         preset: "claude_code",
+        append: customPrompt,
       },
-      settingSources: [],
+      mcpServers: {
+        shadcn: {
+          command: "npx",
+          args: ["shadcn@latest", "mcp"],
+        },
+      },
+      allowedTools: [
+        "mcp__shadcn__get_project_registries",
+        "mcp__shadcn__list_items_in_registries",
+        "mcp__shadcn__search_items_in_registries",
+        "mcp__shadcn__view_items_in_registries",
+        "mcp__shadcn__get_item_examples_from_registries",
+        "mcp__shadcn__get_add_command_for_items",
+        "mcp__shadcn__get_audit_checklist",
+      ],
+      settingSources: ["project", "user"],
       includePartialMessages: true,
       stderr: (data: string) => {
         log("error", "Claude Code stderr:", { output: data });
@@ -301,7 +336,7 @@ async function processStreamingSession() {
 
           await updateAssistantMessage(
             currentAssistantMessageId,
-            currentMessageChunks
+            currentMessageChunks,
           );
         } else if (message.event.type === "content_block_delta") {
           const lastChunk =
@@ -329,7 +364,7 @@ async function processStreamingSession() {
           if (currentAssistantMessageId) {
             await updateAssistantMessage(
               currentAssistantMessageId,
-              currentMessageChunks
+              currentMessageChunks,
             );
           }
         } else if (message.event.type === "content_block_stop") {
@@ -355,7 +390,7 @@ async function processStreamingSession() {
           if (currentAssistantMessageId) {
             await updateAssistantMessage(
               currentAssistantMessageId,
-              currentMessageChunks
+              currentMessageChunks,
             );
           }
         }
@@ -363,14 +398,14 @@ async function processStreamingSession() {
         if (currentAssistantMessageId && currentMessageChunks.length > 0) {
           await updateAssistantMessage(
             currentAssistantMessageId,
-            currentMessageChunks
+            currentMessageChunks,
           );
 
           const textBlocks = currentMessageChunks.filter(
-            (c) => c.type === "text"
+            (c) => c.type === "text",
           ).length;
           const toolBlocks = currentMessageChunks.filter(
-            (c) => c.type === "tool_use"
+            (c) => c.type === "tool_use",
           ).length;
 
           log("info", "Finalized assistant message", {
@@ -383,7 +418,7 @@ async function processStreamingSession() {
           // Mark the user message as successfully processed
           if (streamingState.currentProcessingMessage) {
             streamingState.processedMessageIds.add(
-              streamingState.currentProcessingMessage.id
+              streamingState.currentProcessingMessage.id,
             );
             log("info", "Marked user message as processed", {
               userMessageId: streamingState.currentProcessingMessage.id,
@@ -429,7 +464,7 @@ async function processStreamingSession() {
     if (streamingState.messageQueue.length > 0) {
       log(
         "info",
-        `Processing ${streamingState.messageQueue.length} queued message(s)`
+        `Processing ${streamingState.messageQueue.length} queued message(s)`,
       );
       processStreamingSession().catch((error) => {
         log("error", "Failed to restart streaming session", {
@@ -465,7 +500,7 @@ async function processUserMessage(userMessage: UserMessage | null) {
     streamingState.messageQueue.push(userMessage);
     log(
       "info",
-      `Queued message (queue size: ${streamingState.messageQueue.length})`
+      `Queued message (queue size: ${streamingState.messageQueue.length})`,
     );
 
     // Wake up the generator if it's waiting
@@ -557,7 +592,7 @@ client.onUpdate(
         streamingState.hasInitialized = true;
       }
     }
-  }
+  },
 );
 
 log("info", "Worker subscribed to messages", { siteId });
