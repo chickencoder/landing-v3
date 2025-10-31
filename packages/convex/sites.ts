@@ -128,3 +128,48 @@ export const getSite = query({
     return await ctx.db.get(siteId);
   },
 });
+
+// Internal mutation to schedule a shutdown
+export const scheduleShutdown = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+    scheduledId: v.id("_scheduled_functions"),
+  },
+  handler: async (ctx, { siteId, scheduledId }) => {
+    await ctx.db.patch(siteId, {
+      scheduledShutdownId: scheduledId,
+    });
+  },
+});
+
+// Internal mutation to cancel a scheduled shutdown
+export const cancelScheduledShutdown = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+  },
+  handler: async (ctx, { siteId }) => {
+    const site = await ctx.db.get(siteId);
+    if (!site) {
+      throw new Error(`Site ${siteId} not found`);
+    }
+
+    if (site.scheduledShutdownId) {
+      await ctx.scheduler.cancel(site.scheduledShutdownId);
+      await ctx.db.patch(siteId, {
+        scheduledShutdownId: undefined,
+      });
+    }
+  },
+});
+
+// Internal mutation to clear scheduled shutdown ID (after execution)
+export const clearScheduledShutdown = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+  },
+  handler: async (ctx, { siteId }) => {
+    await ctx.db.patch(siteId, {
+      scheduledShutdownId: undefined,
+    });
+  },
+});

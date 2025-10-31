@@ -7,6 +7,8 @@ import {
   buildSandboxImage,
   createSandbox,
   getWorkerLogs,
+  stopSandboxInstance,
+  startSandboxInstance,
 } from "./lib/daytona";
 import { internal } from "./_generated/api";
 
@@ -138,5 +140,114 @@ export const getWorkerProcessLogs = action({
     console.log("[CONVEX A(sandbox:getWorkerProcessLogs)] [LOG]", logs.output);
 
     return logs;
+  },
+});
+
+/**
+ * Stop a sandbox (called when presence becomes empty after 30s delay)
+ */
+export const stopSandbox = internalAction({
+  args: {
+    siteId: v.id("sites"),
+  },
+  handler: async (ctx, { siteId }) => {
+    console.log("[stopSandbox] Stopping sandbox for site", { siteId });
+
+    try {
+      const site = await ctx.runQuery(internal.sites.getSiteById, { siteId });
+      if (!site) {
+        throw new Error(`Site ${siteId} not found`);
+      }
+
+      if (!site.sandboxId) {
+        console.log("[stopSandbox] No sandbox to stop");
+        return { success: false, reason: "no_sandbox" };
+      }
+
+      // Check if site is already stopped
+      if (site.status === "stopped") {
+        console.log("[stopSandbox] Sandbox already stopped");
+        return { success: false, reason: "already_stopped" };
+      }
+
+      // Stop the sandbox
+      await stopSandboxInstance(site.sandboxId);
+
+      // Update status in database
+      await ctx.runMutation(internal.sites.updateSiteStatus, {
+        siteId,
+        status: "stopped",
+      });
+
+      // Clear the scheduled shutdown ID
+      await ctx.runMutation(internal.sites.clearScheduledShutdown, {
+        siteId,
+      });
+
+      console.log("[stopSandbox] Sandbox stopped successfully", {
+        siteId,
+        sandboxId: site.sandboxId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("[stopSandbox] Failed to stop sandbox:", {
+        siteId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  },
+});
+
+/**
+ * Resume a stopped sandbox (called when presence returns)
+ */
+export const resumeSandbox = internalAction({
+  args: {
+    siteId: v.id("sites"),
+  },
+  handler: async (ctx, { siteId }) => {
+    console.log("[resumeSandbox] Resuming sandbox for site", { siteId });
+
+    try {
+      const site = await ctx.runQuery(internal.sites.getSiteById, { siteId });
+      if (!site) {
+        throw new Error(`Site ${siteId} not found`);
+      }
+
+      if (!site.sandboxId) {
+        console.log("[resumeSandbox] No sandbox to resume");
+        return { success: false, reason: "no_sandbox" };
+      }
+
+      // Check if already running
+      if (site.status === "started") {
+        console.log("[resumeSandbox] Sandbox already running");
+        return { success: false, reason: "already_started" };
+      }
+
+      // Start the sandbox
+      await startSandboxInstance(site.sandboxId);
+
+      // Update status in database
+      await ctx.runMutation(internal.sites.updateSiteStatus, {
+        siteId,
+        status: "started",
+      });
+
+      console.log("[resumeSandbox] Sandbox resumed successfully", {
+        siteId,
+        sandboxId: site.sandboxId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("[resumeSandbox] Failed to resume sandbox:", {
+        siteId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   },
 });

@@ -172,3 +172,53 @@ export async function getWorkerLogs(sandboxId: string) {
     };
   }
 }
+
+/**
+ * Stop a Daytona sandbox
+ */
+export async function stopSandboxInstance(sandboxId: string) {
+  const daytona = getDaytonaClient();
+  const sandbox = await daytona.findOne({ id: sandboxId });
+
+  if (!sandbox) {
+    throw new Error(`Sandbox ${sandboxId} not found`);
+  }
+
+  console.log("[DAYTONA] Stopping sandbox:", { id: sandboxId });
+
+  try {
+    await sandbox.stop(60);
+    console.log("[DAYTONA] Sandbox stopped successfully:", { id: sandboxId });
+  } catch (error) {
+    console.error("[DAYTONA] Failed to stop sandbox:", {
+      id: sandboxId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+/**
+ * Start a stopped Daytona sandbox
+ */
+export async function startSandboxInstance(sandboxId: string) {
+  const daytona = getDaytonaClient();
+  const sandbox = await daytona.findOne({ id: sandboxId });
+
+  if (!sandbox) {
+    throw new Error(`Sandbox ${sandboxId} not found`);
+  }
+
+  console.log("[DAYTONA] Starting sandbox:", { id: sandboxId });
+
+  try {
+    await sandbox.start(60);
+    console.log("[DAYTONA] Sandbox started successfully:", { id: sandboxId });
+  } catch (error) {
+    console.error("[DAYTONA] Failed to start sandbox:", {
+      id: sandboxId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}

@@ -37,6 +37,7 @@ export default defineSchema({
       )
     ),
     lastWebhookTimestamp: v.optional(v.string()), // ISO timestamp of last processed webhook
+    scheduledShutdownId: v.optional(v.id("_scheduled_functions")), // ID of scheduled shutdown to enable cancellation
   }),
 
   messages: defineTable({
@@ -54,4 +55,12 @@ export default defineSchema({
   })
     .index("by_siteId", ["siteId"])
     .index("by_message_id", ["id"]),
+
+  activeUsers: defineTable({
+    userId: v.string(), // Clerk user ID
+    siteId: v.id("sites"), // Which site they're active on
+    lastHeartbeat: v.number(), // Date.now() timestamp
+  })
+    .index("by_siteId", ["siteId"])
+    .index("by_siteId_and_userId", ["siteId", "userId"]),
 });

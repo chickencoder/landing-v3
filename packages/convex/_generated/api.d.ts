@@ -13,6 +13,7 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as index from "../index.js";
 import type * as lib_clerk from "../lib/clerk.js";
@@ -20,6 +21,7 @@ import type * as lib_daytona from "../lib/daytona.js";
 import type * as lib_workerBundle from "../lib/workerBundle.js";
 import type * as messages from "../messages.js";
 import type * as organizations from "../organizations.js";
+import type * as presence from "../presence.js";
 import type * as sandbox from "../sandbox.js";
 import type * as sites from "../sites.js";
 import type * as users from "../users.js";
@@ -33,6 +35,7 @@ import type * as users from "../users.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  crons: typeof crons;
   http: typeof http;
   index: typeof index;
   "lib/clerk": typeof lib_clerk;
@@ -40,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   "lib/workerBundle": typeof lib_workerBundle;
   messages: typeof messages;
   organizations: typeof organizations;
+  presence: typeof presence;
   sandbox: typeof sandbox;
   sites: typeof sites;
   users: typeof users;
