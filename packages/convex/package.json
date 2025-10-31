@@ -6,6 +6,22 @@
     "dev": "convex dev",
     "build": "convex deploy"
   },
+  "main": "_generated/api.js",
+  "types": "_generated/api.d.ts",
+  "exports": {
+    "./_generated/api": {
+      "types": "./_generated/api.d.ts",
+      "default": "./_generated/api.js"
+    },
+    "./_generated/dataModel": {
+      "types": "./_generated/dataModel.d.ts",
+      "default": "./_generated/dataModel.js"
+    },
+    "./types": {
+      "types": "./types.ts",
+      "default": "./types.ts"
+    }
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

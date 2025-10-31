@@ -6,6 +6,7 @@ import { generateSessionToken } from "./lib/clerk";
 import {
   buildSandboxImage,
   createSandbox,
+  startDevServer,
   uploadAndStartWorker,
   getWorkerLogs,
 } from "./lib/daytona";
@@ -15,9 +16,12 @@ import { getWorkerSource } from "./lib/workerBundle";
 export const startSandbox = internalAction({
   args: {
     siteId: v.id("sites"),
-    message: v.string(),
   },
-  handler: async (ctx, { siteId, message }) => {
+  handler: async (ctx, { siteId }) => {
+    console.log("[CONVEX A(sandbox:startSandbox)] Starting sandbox creation", {
+      siteId,
+    });
+
     try {
       const site = await ctx.runQuery(internal.sites.getSiteById, { siteId });
       if (!site) {
@@ -25,13 +29,7 @@ export const startSandbox = internalAction({
       }
 
       const { userId, orgId } = site;
-
-      // Insert user message
-      await ctx.runMutation(internal.messages.insertMessage, {
-        id: crypto.randomUUID(),
-        role: "user",
-        parts: [{ type: "text", text: message }],
-        siteId,
+      console.log("[CONVEX A(sandbox:startSandbox)] Site found", {
         userId,
         orgId,
       });
@@ -40,9 +38,15 @@ export const startSandbox = internalAction({
         siteId,
         status: "creating",
       });
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Site status set to creating"
+      );
 
       // Generate Clerk token for worker authentication
       const clerkToken = await generateSessionToken(userId, orgId, 3600);
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Clerk token generated for worker auth"
+      );
 
       // Build and create sandbox
       const image = buildSandboxImage();
@@ -52,7 +56,13 @@ export const startSandbox = internalAction({
       if (!convexUrl || !anthropicApiKey) {
         throw new Error("Missing required environment variables");
       }
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Environment variables validated"
+      );
 
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Creating Daytona sandbox..."
+      );
       const sandbox = await createSandbox(image, {
         CONVEX_URL: convexUrl,
         SITE_ID: siteId,
@@ -60,31 +70,92 @@ export const startSandbox = internalAction({
         ANTHROPIC_API_KEY: anthropicApiKey,
       });
 
+      console.log("[CONVEX A(sandbox:startSandbox)] Sandbox created", {
+        sandboxId: sandbox.id,
+        sandboxData: JSON.stringify(sandbox, null, 2),
+      });
+
       await ctx.runMutation(internal.sites.updateSandboxId, {
         siteId,
         sandboxId: sandbox.id,
       });
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Sandbox ID stored in database"
+      );
+
+      // Start dev server
+      console.log("[CONVEX A(sandbox:startSandbox)] Starting dev server...");
+      const devServer = await startDevServer(sandbox.id);
+      console.log("[CONVEX A(sandbox:startSandbox)] Dev server started", {
+        commandId: devServer.commandId,
+        previewUrl: devServer.previewUrl,
+      });
+
+      await ctx.runMutation(internal.sites.updateDevCommandId, {
+        siteId,
+        devCommandId: devServer.commandId,
+      });
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Dev command ID stored in database"
+      );
+
+      // Use the preview URL from the dev server
+      const previewUrl = devServer.previewUrl;
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Using preview URL from dev server",
+        {
+          previewUrl,
+        }
+      );
+
+      await ctx.runMutation(internal.sites.updatePreviewUrl, {
+        siteId,
+        previewUrl,
+      });
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Preview URL stored in database"
+      );
 
       // Upload and start worker
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Uploading and starting worker..."
+      );
       const workerSource = getWorkerSource();
-      const workerProcess = await uploadAndStartWorker(sandbox.id, workerSource);
+      const workerProcess = await uploadAndStartWorker(
+        sandbox.id,
+        workerSource
+      );
+      console.log("[CONVEX A(sandbox:startSandbox)] Worker started", {
+        sessionId: workerProcess.sessionId,
+        commandId: workerProcess.commandId,
+      });
 
       await ctx.runMutation(internal.sites.updateWorkerProcessIds, {
         siteId,
         daytonaSessionId: workerProcess.sessionId,
         commandId: workerProcess.commandId,
       });
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Worker process IDs stored in database"
+      );
 
       await ctx.runMutation(internal.sites.updateSiteStatus, {
         siteId,
         status: "ready",
       });
+      console.log(
+        "[CONVEX A(sandbox:startSandbox)] Site status set to ready - sandbox fully operational"
+      );
 
       return {
         success: true,
         sandboxId: sandbox.id,
       };
     } catch (error) {
+      console.error(
+        "[CONVEX A(sandbox:startSandbox)] Error during sandbox creation:",
+        error
+      );
       await ctx.runMutation(internal.sites.updateSiteStatus, {
         siteId,
         status: "error",

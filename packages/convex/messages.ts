@@ -74,7 +74,7 @@ export const upsertMessage = mutation({
     // Security: Verify the authenticated user owns this site
     if (site.userId !== identity.subject) {
       throw new Error(
-        `Unauthorized: User ${identity.subject} does not own site ${siteId}`,
+        `Unauthorized: User ${identity.subject} does not own site ${siteId}`
       );
     }
 

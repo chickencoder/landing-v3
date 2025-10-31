@@ -59,6 +59,7 @@ turbo check-types
 - Utility functions use `apps/app/lib/utils.ts` with clsx and tailwind-merge
 - Tailwind CSS 4 configuration via PostCSS (no tailwind.config.js)
 - Global styles in `apps/app/app/globals.css`
+- **Next.js 16 uses `proxy.ts` instead of `middleware.ts`** - This is the new convention for middleware in Next.js 16
 
 ## Turborepo Configuration
 

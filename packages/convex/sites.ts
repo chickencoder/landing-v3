@@ -34,11 +34,21 @@ export const create = mutation({
       orgId: orgId as string,
     });
 
-    // If message is provided, schedule the sandbox action to run immediately
+    // If message is provided, insert it and schedule the sandbox action
     if (message) {
+      // Insert user message
+      await ctx.db.insert("messages", {
+        id: crypto.randomUUID(),
+        role: "user",
+        parts: [{ type: "text", text: message }],
+        siteId,
+        userId,
+        orgId: orgId as string,
+      });
+
+      // Schedule the sandbox action to run immediately
       await ctx.scheduler.runAfter(0, internal.sandbox.startSandbox, {
         siteId,
-        message,
       });
     }
 
@@ -93,6 +103,28 @@ export const updateWorkerProcessIds = internalMutation({
   },
   handler: async (ctx, { siteId, daytonaSessionId, commandId }) => {
     await ctx.db.patch(siteId, { daytonaSessionId, commandId });
+  },
+});
+
+// Internal mutation to update preview URL (used by action)
+export const updatePreviewUrl = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+    previewUrl: v.string(),
+  },
+  handler: async (ctx, { siteId, previewUrl }) => {
+    await ctx.db.patch(siteId, { previewUrl });
+  },
+});
+
+// Internal mutation to update dev server command ID (used by action)
+export const updateDevCommandId = internalMutation({
+  args: {
+    siteId: v.id("sites"),
+    devCommandId: v.string(),
+  },
+  handler: async (ctx, { siteId, devCommandId }) => {
+    await ctx.db.patch(siteId, { devCommandId });
   },
 });
 

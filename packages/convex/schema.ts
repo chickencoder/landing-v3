@@ -27,7 +27,9 @@ export default defineSchema({
     sessionId: v.optional(v.string()), // Claude Agent SDK session ID (UUID)
     daytonaSessionId: v.optional(v.string()), // Daytona process session ID
     commandId: v.optional(v.string()),
+    devCommandId: v.optional(v.string()), // Daytona dev server command ID
     sandboxId: v.optional(v.string()),
+    previewUrl: v.optional(v.string()), // Daytona preview URL for the dev server
     status: v.optional(
       v.union(
         v.literal("creating"),
