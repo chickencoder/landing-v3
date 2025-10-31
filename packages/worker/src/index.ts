@@ -605,6 +605,10 @@ async function processStreamingSession() {
           error: error instanceof Error ? error.message : String(error),
         });
       });
+    } else {
+      log("info", "Streaming session completed, worker now idle", {
+        isStreamingActive: streamingState.isStreamingActive,
+      });
     }
   }
 }
