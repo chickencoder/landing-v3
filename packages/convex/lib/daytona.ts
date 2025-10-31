@@ -146,8 +146,6 @@ export async function startDevServer(sandboxId: string) {
   });
 
   return {
-    sessionId,
-    commandId: command.cmdId,
     previewUrl,
   };
 }
@@ -192,8 +190,7 @@ export async function uploadAndStartWorker(
   }
 
   return {
-    sessionId,
-    commandId: command.cmdId,
+    success: true,
   };
 }
 

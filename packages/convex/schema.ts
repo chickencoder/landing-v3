@@ -25,16 +25,15 @@ export default defineSchema({
     userId: v.string(),
     orgId: v.string(),
     sessionId: v.optional(v.string()), // Claude Agent SDK session ID (UUID)
-    daytonaSessionId: v.optional(v.string()), // Daytona process session ID
-    commandId: v.optional(v.string()),
-    devCommandId: v.optional(v.string()), // Daytona dev server command ID
-    sandboxId: v.optional(v.string()),
+    sandboxId: v.optional(v.string()), // Daytona sandbox ID
     previewUrl: v.optional(v.string()), // Daytona preview URL for the dev server
     status: v.optional(
       v.union(
-        v.literal("creating"),
-        v.literal("ready"),
-        v.literal("error")
+        v.literal("creating"), // Initial setup before Daytona sandbox is created
+        v.literal("started"), // Sandbox is running (replaces "ready")
+        v.literal("stopped"), // Sandbox has been stopped
+        v.literal("error"), // Error during creation or runtime
+        v.literal("deleted") // Sandbox has been deleted
       )
     ),
   }),

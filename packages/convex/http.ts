@@ -204,4 +204,95 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/daytona-webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const payload = await request.text();
+      const body = JSON.parse(payload);
+
+      console.log("[WEBHOOK] Received Daytona webhook:", body);
+
+      // Extract sandbox ID and state from webhook payload
+      const { id: sandboxId, newState, oldState, updatedAt } = body;
+
+      if (!sandboxId || !newState) {
+        console.error("[WEBHOOK] Invalid webhook payload - missing id or newState");
+        return new Response(
+          JSON.stringify({ error: "Invalid payload" }),
+          { status: 400 }
+        );
+      }
+
+      // Find the site associated with this sandbox
+      const site = await ctx.runQuery(internal.sites.getSiteBySandboxId, {
+        sandboxId,
+      });
+
+      if (!site) {
+        console.warn("[WEBHOOK] No site found for sandboxId:", sandboxId);
+        // Return 200 to acknowledge receipt even if site not found
+        // (sandbox might have been deleted from our DB already)
+        return new Response(
+          JSON.stringify({ received: true }),
+          { status: 200 }
+        );
+      }
+
+      // Map Daytona states to our site status
+      // Daytona states: "starting", "started", "stopped", "error", etc.
+      let status: "creating" | "started" | "stopped" | "error" | "deleted" | null = null;
+
+      if (newState === "started") {
+        status = "started";
+      } else if (newState === "stopped") {
+        status = "stopped";
+      } else if (newState === "deleted") {
+        status = "deleted";
+      } else if (newState === "error" || newState.includes("error")) {
+        status = "error";
+      } else if (newState === "starting") {
+        status = "creating";
+      }
+
+      // Update site status if we have a mapping
+      if (status) {
+        await ctx.runMutation(internal.sites.updateSiteStatus, {
+          siteId: site._id,
+          status,
+        });
+
+        console.log("[WEBHOOK] Updated site status:", {
+          siteId: site._id,
+          sandboxId,
+          oldState,
+          newState,
+          status,
+          updatedAt,
+        });
+      } else {
+        console.log("[WEBHOOK] No status mapping for Daytona state:", newState);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    } catch (error) {
+      console.error("[WEBHOOK] Error processing Daytona webhook:", error);
+      return new Response(
+        JSON.stringify({ error: "Internal server error" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+  }),
+});
+
 export default http;

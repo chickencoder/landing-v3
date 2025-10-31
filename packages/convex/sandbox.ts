@@ -87,17 +87,8 @@ export const startSandbox = internalAction({
       console.log("[CONVEX A(sandbox:startSandbox)] Starting dev server...");
       const devServer = await startDevServer(sandbox.id);
       console.log("[CONVEX A(sandbox:startSandbox)] Dev server started", {
-        commandId: devServer.commandId,
         previewUrl: devServer.previewUrl,
       });
-
-      await ctx.runMutation(internal.sites.updateDevCommandId, {
-        siteId,
-        devCommandId: devServer.commandId,
-      });
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Dev command ID stored in database"
-      );
 
       // Use the preview URL from the dev server
       const previewUrl = devServer.previewUrl;
@@ -121,30 +112,15 @@ export const startSandbox = internalAction({
         "[CONVEX A(sandbox:startSandbox)] Uploading and starting worker..."
       );
       const workerSource = getWorkerSource();
-      const workerProcess = await uploadAndStartWorker(
-        sandbox.id,
-        workerSource
-      );
-      console.log("[CONVEX A(sandbox:startSandbox)] Worker started", {
-        sessionId: workerProcess.sessionId,
-        commandId: workerProcess.commandId,
-      });
-
-      await ctx.runMutation(internal.sites.updateWorkerProcessIds, {
-        siteId,
-        daytonaSessionId: workerProcess.sessionId,
-        commandId: workerProcess.commandId,
-      });
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Worker process IDs stored in database"
-      );
+      await uploadAndStartWorker(sandbox.id, workerSource);
+      console.log("[CONVEX A(sandbox:startSandbox)] Worker started");
 
       await ctx.runMutation(internal.sites.updateSiteStatus, {
         siteId,
-        status: "ready",
+        status: "started",
       });
       console.log(
-        "[CONVEX A(sandbox:startSandbox)] Site status set to ready - sandbox fully operational"
+        "[CONVEX A(sandbox:startSandbox)] Site status set to started - sandbox fully operational"
       );
 
       return {

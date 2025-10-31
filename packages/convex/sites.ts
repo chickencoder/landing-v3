@@ -12,7 +12,6 @@ export const create = mutation({
     message: v.optional(v.string()),
   },
   handler: async (ctx, { message }) => {
-    // Get user identity from Clerk JWT
     const identity = await ctx.auth.getUserIdentity();
 
     if (!identity) {
@@ -64,6 +63,17 @@ export const getSiteById = internalQuery({
   },
 });
 
+// Internal query to find site by sandbox ID (used by webhooks)
+export const getSiteBySandboxId = internalQuery({
+  args: { sandboxId: v.string() },
+  handler: async (ctx, { sandboxId }) => {
+    return await ctx.db
+      .query("sites")
+      .filter((q) => q.eq(q.field("sandboxId"), sandboxId))
+      .first();
+  },
+});
+
 // Internal mutation to update sandboxId (used by action)
 // Also clears session ID since new sandbox = new environment
 export const updateSandboxId = internalMutation({
@@ -79,30 +89,20 @@ export const updateSandboxId = internalMutation({
   },
 });
 
-// Internal mutation to update site status (used by action)
+// Internal mutation to update site status (used by action and webhooks)
 export const updateSiteStatus = internalMutation({
   args: {
     siteId: v.id("sites"),
     status: v.union(
       v.literal("creating"),
-      v.literal("ready"),
+      v.literal("started"),
+      v.literal("stopped"),
       v.literal("error"),
+      v.literal("deleted"),
     ),
   },
   handler: async (ctx, { siteId, status }) => {
     await ctx.db.patch(siteId, { status });
-  },
-});
-
-// Internal mutation to update worker process IDs (used by action)
-export const updateWorkerProcessIds = internalMutation({
-  args: {
-    siteId: v.id("sites"),
-    daytonaSessionId: v.string(),
-    commandId: v.string(),
-  },
-  handler: async (ctx, { siteId, daytonaSessionId, commandId }) => {
-    await ctx.db.patch(siteId, { daytonaSessionId, commandId });
   },
 });
 
@@ -114,17 +114,6 @@ export const updatePreviewUrl = internalMutation({
   },
   handler: async (ctx, { siteId, previewUrl }) => {
     await ctx.db.patch(siteId, { previewUrl });
-  },
-});
-
-// Internal mutation to update dev server command ID (used by action)
-export const updateDevCommandId = internalMutation({
-  args: {
-    siteId: v.id("sites"),
-    devCommandId: v.string(),
-  },
-  handler: async (ctx, { siteId, devCommandId }) => {
-    await ctx.db.patch(siteId, { devCommandId });
   },
 });
 
