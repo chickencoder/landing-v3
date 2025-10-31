@@ -174,8 +174,45 @@ export const clearScheduledShutdown = internalMutation({
   },
 });
 
-// Internal mutation to update worker and dev server state
-export const updateWorkerState = internalMutation({
+// Mutation to update worker and dev server state (called by worker)
+export const updateWorkerState = mutation({
+  args: {
+    siteId: v.id("sites"),
+    worker: v.optional(
+      v.object({
+        lastHeartbeat: v.number(),
+        isStreaming: v.boolean(),
+      })
+    ),
+    devServer: v.optional(
+      v.object({
+        isRunning: v.boolean(),
+        lastChecked: v.number(),
+      })
+    ),
+  },
+  handler: async (ctx, { siteId, worker, devServer }) => {
+    // Verify authentication
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    // Verify the user owns this site
+    const site = await ctx.db.get(siteId);
+    if (!site) throw new Error(`Site ${siteId} not found`);
+    if (site.userId !== identity.subject) {
+      throw new Error("Unauthorized: You do not own this site");
+    }
+
+    const updates: any = {};
+    if (worker) updates.worker = worker;
+    if (devServer) updates.devServer = devServer;
+
+    await ctx.db.patch(siteId, updates);
+  },
+});
+
+// Internal mutation to update worker state (called by webhooks/actions)
+export const updateWorkerStateInternal = internalMutation({
   args: {
     siteId: v.id("sites"),
     worker: v.optional(
