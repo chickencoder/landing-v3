@@ -36,6 +36,7 @@ export default defineSchema({
         v.literal("deleted") // Sandbox has been deleted
       )
     ),
+    lastWebhookTimestamp: v.optional(v.string()), // ISO timestamp of last processed webhook
   }),
 
   messages: defineTable({

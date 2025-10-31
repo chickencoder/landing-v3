@@ -100,9 +100,13 @@ export const updateSiteStatus = internalMutation({
       v.literal("error"),
       v.literal("deleted"),
     ),
+    timestamp: v.optional(v.string()),
   },
-  handler: async (ctx, { siteId, status }) => {
-    await ctx.db.patch(siteId, { status });
+  handler: async (ctx, { siteId, status, timestamp }) => {
+    await ctx.db.patch(siteId, {
+      status,
+      ...(timestamp && { lastWebhookTimestamp: timestamp }),
+    });
   },
 });
 

@@ -6,136 +6,107 @@ import { generateSessionToken } from "./lib/clerk";
 import {
   buildSandboxImage,
   createSandbox,
-  startDevServer,
-  uploadAndStartWorker,
   getWorkerLogs,
 } from "./lib/daytona";
 import { internal } from "./_generated/api";
-import { getWorkerSource } from "./lib/workerBundle";
+
+/**
+ * Validate required environment variables
+ */
+function validateEnvironment() {
+  const convexUrl = process.env.CONVEX_CLOUD_URL;
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+  const workerUrl = process.env.WORKER_URL;
+
+  if (!convexUrl || !anthropicApiKey || !workerUrl) {
+    throw new Error(
+      "Missing required environment variables: CONVEX_CLOUD_URL, ANTHROPIC_API_KEY, or WORKER_URL"
+    );
+  }
+
+  return { convexUrl, anthropicApiKey };
+}
 
 export const startSandbox = internalAction({
   args: {
     siteId: v.id("sites"),
   },
   handler: async (ctx, { siteId }) => {
-    console.log("[CONVEX A(sandbox:startSandbox)] Starting sandbox creation", {
-      siteId,
-    });
+    console.log("[startSandbox] Starting", { siteId });
 
     try {
+      // Load site and validate
       const site = await ctx.runQuery(internal.sites.getSiteById, { siteId });
-      if (!site) {
-        throw new Error(`Site ${siteId} not found`);
-      }
+      if (!site) throw new Error(`Site ${siteId} not found`);
 
-      const { userId, orgId } = site;
-      console.log("[CONVEX A(sandbox:startSandbox)] Site found", {
-        userId,
-        orgId,
-      });
-
+      // Set status to creating
       await ctx.runMutation(internal.sites.updateSiteStatus, {
         siteId,
         status: "creating",
       });
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Site status set to creating"
-      );
 
-      // Generate Clerk token for worker authentication
-      const clerkToken = await generateSessionToken(userId, orgId, 3600);
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Clerk token generated for worker auth"
-      );
+      // Validate environment and generate auth token
+      const { convexUrl, anthropicApiKey } = validateEnvironment();
+      const clerkToken = await generateSessionToken(site.userId, site.orgId, 3600);
 
-      // Build and create sandbox
+      // Build sandbox image configuration
       const image = buildSandboxImage();
-      const convexUrl = process.env.CONVEX_CLOUD_URL;
-      const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
 
-      if (!convexUrl || !anthropicApiKey) {
-        throw new Error("Missing required environment variables");
-      }
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Environment variables validated"
-      );
-
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Creating Daytona sandbox..."
-      );
-      const sandbox = await createSandbox(image, {
+      // Prepare environment variables for sandbox
+      const envVars: Record<string, string> = {
         CONVEX_URL: convexUrl,
         SITE_ID: siteId,
         CLERK_TOKEN: clerkToken,
         ANTHROPIC_API_KEY: anthropicApiKey,
-      });
+      };
 
-      console.log("[CONVEX A(sandbox:startSandbox)] Sandbox created", {
-        sandboxId: sandbox.id,
-        sandboxData: JSON.stringify(sandbox, null, 2),
-      });
+      // Include session ID for resumption if available
+      if (site.sessionId) {
+        envVars.SESSION_ID = site.sessionId;
+        console.log("[startSandbox] Including session ID for resumption");
+      }
 
+      // Create Daytona sandbox
+      console.log("[startSandbox] Creating sandbox...");
+      const sandbox = await createSandbox(image, envVars);
+
+      // Store sandbox ID and get preview URL
       await ctx.runMutation(internal.sites.updateSandboxId, {
         siteId,
         sandboxId: sandbox.id,
       });
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Sandbox ID stored in database"
-      );
 
-      // Start dev server
-      console.log("[CONVEX A(sandbox:startSandbox)] Starting dev server...");
-      const devServer = await startDevServer(sandbox.id);
-      console.log("[CONVEX A(sandbox:startSandbox)] Dev server started", {
-        previewUrl: devServer.previewUrl,
-      });
-
-      // Use the preview URL from the dev server
-      const previewUrl = devServer.previewUrl;
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Using preview URL from dev server",
-        {
-          previewUrl,
-        }
-      );
-
+      const previewInfo = await sandbox.getPreviewLink(3000);
       await ctx.runMutation(internal.sites.updatePreviewUrl, {
         siteId,
-        previewUrl,
+        previewUrl: previewInfo.url,
       });
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Preview URL stored in database"
-      );
 
-      // Upload and start worker
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Uploading and starting worker..."
-      );
-      const workerSource = getWorkerSource();
-      await uploadAndStartWorker(sandbox.id, workerSource);
-      console.log("[CONVEX A(sandbox:startSandbox)] Worker started");
-
+      // Mark as started (webhook will also update this when Daytona confirms)
       await ctx.runMutation(internal.sites.updateSiteStatus, {
         siteId,
         status: "started",
       });
-      console.log(
-        "[CONVEX A(sandbox:startSandbox)] Site status set to started - sandbox fully operational"
-      );
+
+      console.log("[startSandbox] Completed", {
+        sandboxId: sandbox.id,
+        previewUrl: previewInfo.url,
+      });
 
       return {
         success: true,
         sandboxId: sandbox.id,
       };
     } catch (error) {
-      console.error(
-        "[CONVEX A(sandbox:startSandbox)] Error during sandbox creation:",
-        error
-      );
+      console.error("[startSandbox] Failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+
       await ctx.runMutation(internal.sites.updateSiteStatus, {
         siteId,
         status: "error",
       });
+
       throw error;
     }
   },

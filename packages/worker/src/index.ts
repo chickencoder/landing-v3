@@ -23,7 +23,25 @@ const customPrompt = `
 
   You are currently in the next.js project directory. Work from here. The user can see a live preview of the site on the right hand side.
 
-  The dev server is already running on another process on port 3000.
+  ## Process Management
+
+  The dev server and this worker process are both managed by supervisord and will auto-restart if they crash.
+
+  **Dev server**: Running on port 3000 (managed by supervisord as "dev-server")
+  **Worker**: This process you're running in (managed by supervisord as "worker")
+
+  ### Managing the dev server:
+  - Check status: \`supervisorctl status dev-server\`
+  - Restart: \`supervisorctl restart dev-server\`
+  - View logs: \`tail -f /home/landing/project/dev.log\`
+  - Read full logs: \`cat /home/landing/project/dev.log\`
+
+  ### If the dev server isn't responding or you need to see what's happening:
+  1. Check logs first: \`cat /home/landing/project/dev.log\`
+  2. Check process status: \`supervisorctl status dev-server\`
+  3. Restart if needed: \`supervisorctl restart dev-server\`
+
+  Do NOT try to manually run \`npm run dev\` - supervisord is already managing this process.
 `;
 
 // Logging utilities
@@ -245,11 +263,34 @@ async function processStreamingSession() {
   streamingState.isStreamingActive = true;
 
   try {
-    log("info", "Starting new streaming session");
+    log("info", "Starting streaming session");
 
-    // TODO: Resume not working - session files don't persist across worker restarts
-    // Disable for now until we figure out persistent session storage
-    const resumeSessionId: string | null = null;
+    // Check if we can resume an existing session from environment variable
+    let resumeSessionId: string | null = null;
+    if (process.env.SESSION_ID) {
+      try {
+        const existingMessages = await client.query(
+          api.messages.getMessagesBySiteId,
+          { siteId }
+        );
+
+        if (existingMessages.length > 0) {
+          resumeSessionId = process.env.SESSION_ID;
+          log("info", "Found existing session to resume from environment", {
+            sessionId: resumeSessionId.substring(0, 20) + "...",
+            messageCount: existingMessages.length,
+          });
+        } else {
+          log("info", "Session ID provided but no messages found, starting fresh");
+        }
+      } catch (error) {
+        log("warn", "Could not fetch previous messages, starting fresh session", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } else {
+      log("info", "No previous session ID, starting fresh");
+    }
 
     const queryOptions: Options = {
       permissionMode: "bypassPermissions",
@@ -280,10 +321,16 @@ async function processStreamingSession() {
       stderr: (data: string) => {
         log("error", "Claude Code stderr:", { output: data });
       },
+      ...(resumeSessionId && { resume: resumeSessionId }),
     };
 
+    if (resumeSessionId) {
+      streamingState.sessionId = resumeSessionId;
+    }
+
     log("info", "Initializing Claude Agent SDK", {
-      resuming: false,
+      resuming: !!resumeSessionId,
+      sessionId: resumeSessionId ? resumeSessionId.substring(0, 20) + "..." : "new",
       model: "claude-sonnet-4-5-20250929",
       permissionMode: "bypassPermissions",
       maxTurns: 50,

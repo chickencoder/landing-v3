@@ -23,20 +23,30 @@ export function getDaytonaClient(): Daytona {
 }
 
 /**
- * Build the landing base image with pre-cloned repository and dependencies
- * This significantly speeds up sandbox creation by avoiding git clone and npm install at runtime
+ * Build the landing base image with pre-cloned repository, dependencies, and supervisord
+ * Supervisord automatically starts the dev server and worker when the sandbox boots
+ * Worker is downloaded from R2 at image build time
  * @returns Daytona Image object ready to be used for sandbox creation
  */
 export function buildSandboxImage(): Image {
+  // Get worker URL from environment variable
+  const workerUrl = process.env.WORKER_URL;
+
+  if (!workerUrl) {
+    throw new Error("WORKER_URL environment variable is required for building sandbox images");
+  }
+
+  console.log(`[DAYTONA] Building image with worker from: ${workerUrl}`);
+
   return Image.base("node:22-slim")
     .runCommands(
-      // Install essential utilities and ripgrep (required by Claude Code)
-      "apt-get update && apt-get install -y curl coreutils procps git ripgrep && rm -rf /var/lib/apt/lists/*",
+      // Install essential utilities, ripgrep (required by Claude Code), supervisor, and tmux
+      "apt-get update && apt-get install -y curl coreutils procps git ripgrep supervisor tmux && rm -rf /var/lib/apt/lists/*",
       // Install Anthropic packages globally: claude-code (CLI), claude-agent-sdk (SDK), and sdk (API client)
       "npm install -g @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk @anthropic-ai/sdk",
       // Create landing user with home directory
       "useradd -m -d /home/landing -s /bin/bash landing",
-      "VERSION=2",
+      "VERSION=7",
     )
     .dockerfileCommands(["USER landing"])
     .runCommands(
@@ -47,7 +57,37 @@ export function buildSandboxImage(): Image {
       // Pre-install worker SDK dependencies in project directory
       "cd /home/landing/project && npm install --no-save @anthropic-ai/claude-agent-sdk@^0.1.28 @anthropic-ai/sdk@^0.68.0",
     )
-    .workdir("/home/landing/project");
+    .dockerfileCommands(["USER root"])
+    .runCommands(
+      // Download worker from R2
+      `curl -fsSL -o /home/landing/project/worker.js "${workerUrl}"`,
+      // Make worker executable and set ownership
+      "chmod +x /home/landing/project/worker.js",
+      "chown landing:landing /home/landing/project/worker.js",
+      // Create supervisord configuration for dev-server
+      'echo "[program:dev-server]" > /etc/supervisor/conf.d/landing.conf',
+      'echo "command=npm run dev" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "directory=/home/landing/project" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "user=landing" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "autostart=true" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "autorestart=true" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "stdout_logfile=/home/landing/project/dev.log" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "stderr_logfile=/home/landing/project/dev.log" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "environment=HOME=\\"/home/landing\\",USER=\\"landing\\",PATH=\\"/usr/local/bin:/usr/bin:/bin\\"" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "" >> /etc/supervisor/conf.d/landing.conf',
+      // Create supervisord configuration for worker
+      'echo "[program:worker]" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "command=node worker.js" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "directory=/home/landing/project" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "user=landing" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "autostart=true" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "autorestart=true" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "stdout_logfile=/home/landing/project/worker.log" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "stderr_logfile=/home/landing/project/worker.log" >> /etc/supervisor/conf.d/landing.conf',
+      'echo "environment=HOME=\\"/home/landing\\",USER=\\"landing\\",PATH=\\"/usr/local/bin:/usr/bin:/bin\\",CONVEX_URL=\\"%(ENV_CONVEX_URL)s\\",SITE_ID=\\"%(ENV_SITE_ID)s\\",CLERK_TOKEN=\\"%(ENV_CLERK_TOKEN)s\\",ANTHROPIC_API_KEY=\\"%(ENV_ANTHROPIC_API_KEY)s\\"" >> /etc/supervisor/conf.d/landing.conf',
+    )
+    .workdir("/home/landing/project")
+    .cmd(["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]);
 }
 
 /**
@@ -64,134 +104,42 @@ export async function createSandbox(
 ) {
   const daytona = getDaytonaClient();
 
-  const sandbox = await daytona.create(
-    {
-      image,
-      envVars,
-      public: true,
-      resources: {
-        cpu: options?.cpu || 2,
-        memory: options?.memory || 4,
-        disk: options?.disk || 10,
+  console.log("[DAYTONA] Creating sandbox with configuration:", {
+    cpu: options?.cpu || 2,
+    memory: options?.memory || 4,
+    disk: options?.disk || 10,
+    public: true,
+    envVarsCount: Object.keys(envVars).length,
+  });
+
+  try {
+    const sandbox = await daytona.create(
+      {
+        image,
+        envVars,
+        public: true,
+        resources: {
+          cpu: options?.cpu || 2,
+          memory: options?.memory || 4,
+          disk: options?.disk || 10,
+        },
       },
-    },
-    { timeout: 0 },
-  );
+      { timeout: 60000 }, // 60 second timeout
+    );
 
-  console.log("[DAYTONA] Sandbox created:", {
-    id: sandbox.id,
-  });
+    console.log("[DAYTONA] Sandbox created:", {
+      id: sandbox.id,
+      state: sandbox.state,
+    });
 
-  return sandbox;
-}
-
-/**
- * Clone the landing starter repository into the sandbox
- */
-export async function cloneStarterRepo(sandboxId: string) {
-  const daytona = getDaytonaClient();
-  const sandbox = await daytona.findOne({ id: sandboxId });
-
-  if (!sandbox) {
-    throw new Error(`Sandbox ${sandboxId} not found`);
+    return sandbox;
+  } catch (error) {
+    console.error("[DAYTONA] Sandbox creation failed:", {
+      error: error instanceof Error ? error.message : String(error),
+      name: error instanceof Error ? error.name : 'Unknown',
+    });
+    throw error;
   }
-
-  // Clone the starter repository
-  await sandbox.process.executeCommand(
-    "git clone https://github.com/chickencoder/landing-starter /home/landing/project",
-  );
-
-  // Install dependencies
-  await sandbox.process.executeCommand(
-    "cd /home/landing/project && npm install 2>&1",
-  );
-
-  return { success: true };
-}
-
-/**
- * Start the dev server in the project directory
- */
-export async function startDevServer(sandboxId: string) {
-  const daytona = getDaytonaClient();
-  const sandbox = await daytona.findOne({ id: sandboxId });
-
-  if (!sandbox) {
-    throw new Error(`Sandbox ${sandboxId} not found`);
-  }
-
-  // Create Daytona session for the dev server process
-  const sessionId = `dev-server-${Date.now()}`;
-  await sandbox.process.createSession(sessionId);
-
-  // Start dev server in background
-  const command = await sandbox.process.executeSessionCommand(sessionId, {
-    command: "cd /home/landing/project && npm run dev > dev.log 2>&1",
-    runAsync: true,
-  });
-
-  if (!command.cmdId) {
-    throw new Error("Failed to start dev server process");
-  }
-
-  // Get the public preview URL for port 3000
-  // Using getPreviewLink as per Daytona SDK documentation
-  const previewInfo = await sandbox.getPreviewLink(3000);
-  const previewUrl = previewInfo.url;
-
-  console.log("[DAYTONA] Dev server preview URL retrieved:", {
-    previewUrl,
-    hasToken: !!previewInfo.token,
-    sandboxId: sandbox.id,
-  });
-
-  return {
-    previewUrl,
-  };
-}
-
-/**
- * Upload worker file to sandbox and start it
- * Dependencies are already pre-installed in the image
- */
-export async function uploadAndStartWorker(
-  sandboxId: string,
-  workerSource: string,
-) {
-  const daytona = getDaytonaClient();
-  const sandbox = await daytona.findOne({ id: sandboxId });
-
-  if (!sandbox) {
-    throw new Error(`Sandbox ${sandboxId} not found`);
-  }
-
-  // Upload worker file
-  await sandbox.fs.uploadFile(
-    Buffer.from(workerSource, "utf-8"),
-    "/home/landing/project/worker.js",
-  );
-
-  await sandbox.process.executeCommand(
-    "chmod +x /home/landing/project/worker.js",
-  );
-
-  // Create Daytona session for the worker process
-  const sessionId = `worker-${Date.now()}`;
-  await sandbox.process.createSession(sessionId);
-
-  // Start worker in background
-  const command = await sandbox.process.executeSessionCommand(sessionId, {
-    command: "cd /home/landing/project && node worker.js > worker.log 2>&1",
-    runAsync: true,
-  });
-
-  if (!command.cmdId) {
-    throw new Error("Failed to start worker process");
-  }
-
-  return {
-    success: true,
-  };
 }
 
 /**

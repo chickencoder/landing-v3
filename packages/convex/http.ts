@@ -215,13 +215,26 @@ http.route({
       console.log("[WEBHOOK] Received Daytona webhook:", body);
 
       // Extract sandbox ID and state from webhook payload
-      const { id: sandboxId, newState, oldState, updatedAt } = body;
+      // Handle two formats:
+      // 1. Initial creation: { id, state, ... }
+      // 2. State change: { id, newState, oldState, ... }
+      const sandboxId = body.id;
+      const currentState = body.newState || body.state;
 
-      if (!sandboxId || !newState) {
-        console.error("[WEBHOOK] Invalid webhook payload - missing id or newState");
+      if (!sandboxId) {
+        console.error("[WEBHOOK] Invalid webhook payload - missing id");
         return new Response(
-          JSON.stringify({ error: "Invalid payload" }),
+          JSON.stringify({ error: "Invalid payload: missing id" }),
           { status: 400 }
+        );
+      }
+
+      // If no state information, just acknowledge
+      if (!currentState) {
+        console.log("[WEBHOOK] No state information in webhook, acknowledging");
+        return new Response(
+          JSON.stringify({ received: true }),
+          { status: 200 }
         );
       }
 
@@ -231,28 +244,44 @@ http.route({
       });
 
       if (!site) {
-        console.warn("[WEBHOOK] No site found for sandboxId:", sandboxId);
+        console.log("[WEBHOOK] No site found for sandboxId:", sandboxId, "(may not be stored yet)");
         // Return 200 to acknowledge receipt even if site not found
-        // (sandbox might have been deleted from our DB already)
+        // Site might not be in DB yet if webhook arrives before we store sandboxId
         return new Response(
           JSON.stringify({ received: true }),
           { status: 200 }
         );
       }
 
+      // Check if this webhook is older than the last processed one
+      const webhookTimestamp = body.updatedAt;
+      if (site.lastWebhookTimestamp && webhookTimestamp) {
+        if (new Date(webhookTimestamp) <= new Date(site.lastWebhookTimestamp)) {
+          console.log("[WEBHOOK] Ignoring old webhook:", {
+            sandboxId,
+            webhookTimestamp,
+            lastProcessed: site.lastWebhookTimestamp,
+          });
+          return new Response(
+            JSON.stringify({ received: true, ignored: true }),
+            { status: 200 }
+          );
+        }
+      }
+
       // Map Daytona states to our site status
-      // Daytona states: "starting", "started", "stopped", "error", etc.
+      // Daytona states: "pending_build", "building_snapshot", "starting", "started", "stopped", "error", etc.
       let status: "creating" | "started" | "stopped" | "error" | "deleted" | null = null;
 
-      if (newState === "started") {
+      if (currentState === "started") {
         status = "started";
-      } else if (newState === "stopped") {
+      } else if (currentState === "stopped") {
         status = "stopped";
-      } else if (newState === "deleted") {
+      } else if (currentState === "deleted") {
         status = "deleted";
-      } else if (newState === "error" || newState.includes("error")) {
+      } else if (currentState === "error" || currentState.includes("error")) {
         status = "error";
-      } else if (newState === "starting") {
+      } else if (currentState === "starting" || currentState === "pending_build" || currentState === "building_snapshot") {
         status = "creating";
       }
 
@@ -261,18 +290,19 @@ http.route({
         await ctx.runMutation(internal.sites.updateSiteStatus, {
           siteId: site._id,
           status,
+          timestamp: webhookTimestamp,
         });
 
         console.log("[WEBHOOK] Updated site status:", {
           siteId: site._id,
           sandboxId,
-          oldState,
-          newState,
+          oldState: body.oldState,
+          currentState,
           status,
-          updatedAt,
+          updatedAt: body.updatedAt,
         });
       } else {
-        console.log("[WEBHOOK] No status mapping for Daytona state:", newState);
+        console.log("[WEBHOOK] No status mapping for Daytona state:", currentState);
       }
 
       return new Response(
