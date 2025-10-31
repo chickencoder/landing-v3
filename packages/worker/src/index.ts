@@ -56,15 +56,22 @@ function log(level: "info" | "warn" | "error", message: string, data?: any) {
   }
 }
 
-// Check if dev server is running
+// Check if dev server process is running via supervisorctl
 async function checkDevServer(): Promise<boolean> {
   try {
-    const response = await fetch("http://localhost:3000", {
-      method: "HEAD",
-      signal: AbortSignal.timeout(2000),
+    const { execSync } = await import("child_process");
+    const output = execSync("supervisorctl status dev-server", {
+      encoding: "utf-8",
+      timeout: 5000,
     });
-    return response.ok;
+
+    // supervisorctl status output format: "dev-server RUNNING pid 1234, uptime 0:01:23"
+    // Check if output contains "RUNNING"
+    return output.includes("RUNNING");
   } catch (error) {
+    log("warn", "Failed to check dev server status", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }
