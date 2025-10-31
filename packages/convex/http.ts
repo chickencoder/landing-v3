@@ -293,6 +293,35 @@ http.route({
           timestamp: webhookTimestamp,
         });
 
+        // Reset worker and devServer state when sandbox state changes
+        // This ensures clean state after sandbox restarts
+        if (status === "started") {
+          await ctx.runMutation(internal.sites.updateWorkerState, {
+            siteId: site._id,
+            worker: {
+              lastHeartbeat: Date.now(),
+              isStreaming: false,
+            },
+            devServer: {
+              isRunning: false,
+              lastChecked: Date.now(),
+            },
+          });
+        } else if (status === "stopped" || status === "error" || status === "deleted") {
+          // Clear worker state for stopped/error/deleted sandboxes
+          await ctx.runMutation(internal.sites.updateWorkerState, {
+            siteId: site._id,
+            worker: {
+              lastHeartbeat: Date.now(),
+              isStreaming: false,
+            },
+            devServer: {
+              isRunning: false,
+              lastChecked: Date.now(),
+            },
+          });
+        }
+
         console.log("[WEBHOOK] Updated site status:", {
           siteId: site._id,
           sandboxId,
