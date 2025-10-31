@@ -60,9 +60,23 @@ function log(level: "info" | "warn" | "error", message: string, data?: any) {
 async function checkDevServer(): Promise<boolean> {
   try {
     const { execSync } = await import("child_process");
+
+    // First, try to get all supervisor statuses to see what processes exist
+    let allStatuses = "";
+    try {
+      allStatuses = execSync("supervisorctl status", {
+        encoding: "utf-8",
+        timeout: 5000,
+      });
+    } catch (e) {
+      // Ignore error, will be logged below
+    }
+
+    // Try to check dev-server specifically
     const output = execSync("supervisorctl status dev-server", {
       encoding: "utf-8",
       timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     // supervisorctl status output format: "dev-server RUNNING pid 1234, uptime 0:01:23"
@@ -70,13 +84,20 @@ async function checkDevServer(): Promise<boolean> {
 
     log("info", "Dev server status check", {
       output: output.trim(),
+      allStatuses: allStatuses.trim(),
       isRunning,
     });
 
     return isRunning;
   } catch (error) {
+    // Try to get stderr for more details
+    const stderr = (error as any)?.stderr?.toString() || "";
+    const stdout = (error as any)?.stdout?.toString() || "";
+
     log("warn", "Failed to check dev server status", {
       error: error instanceof Error ? error.message : String(error),
+      stderr,
+      stdout,
     });
     return false;
   }
