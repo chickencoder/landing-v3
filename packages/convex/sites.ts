@@ -6,6 +6,7 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { generateSlug } from "./lib/slugGenerator";
 
 export const create = mutation({
   args: {
@@ -27,8 +28,32 @@ export const create = mutation({
       );
     }
 
+    // Generate a unique slug with collision detection
+    let slug: string;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (attempts < maxAttempts) {
+      slug = generateSlug();
+      const existing = await ctx.db
+        .query("sites")
+        .withIndex("by_slug", (q) => q.eq("slug", slug))
+        .first();
+
+      if (!existing) {
+        break; // Slug is unique
+      }
+
+      attempts++;
+    }
+
+    if (attempts === maxAttempts) {
+      throw new Error("Failed to generate unique slug after 10 attempts");
+    }
+
     // Create site record
     const siteId = await ctx.db.insert("sites", {
+      slug: slug!,
       userId,
       orgId: orgId as string,
     });
@@ -51,7 +76,7 @@ export const create = mutation({
       });
     }
 
-    return { siteId };
+    return { siteId, slug: slug! };
   },
 });
 
@@ -144,6 +169,17 @@ export const getSite = query({
   args: { siteId: v.id("sites") },
   handler: async (ctx, { siteId }) => {
     return await ctx.db.get(siteId);
+  },
+});
+
+// Query to get site by slug
+export const getSiteBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => {
+    return await ctx.db
+      .query("sites")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
   },
 });
 

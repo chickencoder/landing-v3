@@ -11,18 +11,30 @@ const SHUTDOWN_DELAY_MS = 30000; // 30 seconds
  */
 export const heartbeat = mutation({
   args: {
-    siteId: v.id("sites"),
+    slug: v.string(),
   },
-  handler: async (ctx, { siteId }) => {
+  handler: async (ctx, { slug }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
+    // Look up site by slug
+    const site = await ctx.db
+      .query("sites")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+
+    if (!site) {
+      console.error("[presence:heartbeat] Site not found", { slug });
+      return;
+    }
+
     const userId = identity.subject;
     const now = Date.now();
+    const siteId = site._id;
 
     // Upsert user's heartbeat timestamp
     const existing = await ctx.db
-      .query("activeUsers")
+      .query("presence")
       .withIndex("by_siteId_and_userId", (q) =>
         q.eq("siteId", siteId).eq("userId", userId)
       )
@@ -31,18 +43,11 @@ export const heartbeat = mutation({
     if (existing) {
       await ctx.db.patch(existing._id, { lastHeartbeat: now });
     } else {
-      await ctx.db.insert("activeUsers", {
+      await ctx.db.insert("presence", {
         userId,
         siteId,
         lastHeartbeat: now,
       });
-    }
-
-    // Get site to check status and scheduled shutdown
-    const site = await ctx.db.get(siteId);
-    if (!site) {
-      console.error("[presence:heartbeat] Site not found", { siteId });
-      return;
     }
 
     // Entry logic: Cancel pending shutdown if exists
@@ -79,17 +84,29 @@ export const heartbeat = mutation({
  */
 export const leave = mutation({
   args: {
-    siteId: v.id("sites"),
+    slug: v.string(),
   },
-  handler: async (ctx, { siteId }) => {
+  handler: async (ctx, { slug }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
-    const userId = identity.subject;
+    // Look up site by slug
+    const site = await ctx.db
+      .query("sites")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
 
-    // Remove user from activeUsers
+    if (!site) {
+      console.error("[presence:leave] Site not found", { slug });
+      return;
+    }
+
+    const userId = identity.subject;
+    const siteId = site._id;
+
+    // Remove user from presence
     const existing = await ctx.db
-      .query("activeUsers")
+      .query("presence")
       .withIndex("by_siteId_and_userId", (q) =>
         q.eq("siteId", siteId).eq("userId", userId)
       )
@@ -120,7 +137,7 @@ export const checkSitePresence = internalMutation({
 
     // Get all users for this site
     const allUsers = await ctx.db
-      .query("activeUsers")
+      .query("presence")
       .withIndex("by_siteId", (q) => q.eq("siteId", siteId))
       .collect();
 
@@ -207,7 +224,7 @@ export const checkSitePresence = internalMutation({
 });
 
 /**
- * Cron job to clean up stale activeUsers entries globally
+ * Cron job to clean up stale presence entries globally
  * Runs every minute
  */
 export const cleanupStaleUsers = internalMutation({
@@ -216,7 +233,7 @@ export const cleanupStaleUsers = internalMutation({
     const now = Date.now();
     const staleThreshold = now - HEARTBEAT_TIMEOUT_MS;
 
-    const allUsers = await ctx.db.query("activeUsers").collect();
+    const allUsers = await ctx.db.query("presence").collect();
     let cleaned = 0;
 
     for (const user of allUsers) {

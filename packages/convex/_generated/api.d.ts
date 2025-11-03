@@ -18,7 +18,7 @@ import type * as http from "../http.js";
 import type * as index from "../index.js";
 import type * as lib_clerk from "../lib/clerk.js";
 import type * as lib_daytona from "../lib/daytona.js";
-import type * as lib_workerBundle from "../lib/workerBundle.js";
+import type * as lib_slugGenerator from "../lib/slugGenerator.js";
 import type * as messages from "../messages.js";
 import type * as organizations from "../organizations.js";
 import type * as presence from "../presence.js";
@@ -40,7 +40,7 @@ declare const fullApi: ApiFromModules<{
   index: typeof index;
   "lib/clerk": typeof lib_clerk;
   "lib/daytona": typeof lib_daytona;
-  "lib/workerBundle": typeof lib_workerBundle;
+  "lib/slugGenerator": typeof lib_slugGenerator;
   messages: typeof messages;
   organizations: typeof organizations;
   presence: typeof presence;

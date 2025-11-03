@@ -22,6 +22,7 @@ export default defineSchema({
     .index("by_slug", ["slug"]),
 
   sites: defineTable({
+    slug: v.string(), // Human-friendly URL slug (e.g., "happy-cloud-789")
     userId: v.string(),
     orgId: v.string(),
     sessionId: v.optional(v.string()), // Claude Agent SDK session ID (UUID)
@@ -50,7 +51,7 @@ export default defineSchema({
         lastChecked: v.number(),
       })
     ),
-  }),
+  }).index("by_slug", ["slug"]),
 
   messages: defineTable({
     id: v.string(),
@@ -68,7 +69,7 @@ export default defineSchema({
     .index("by_siteId", ["siteId"])
     .index("by_message_id", ["id"]),
 
-  activeUsers: defineTable({
+  presence: defineTable({
     userId: v.string(), // Clerk user ID
     siteId: v.id("sites"), // Which site they're active on
     lastHeartbeat: v.number(), // Date.now() timestamp

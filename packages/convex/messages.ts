@@ -6,22 +6,28 @@ import { v } from "convex/values";
  */
 export const getMessagesBySite = query({
   args: {
-    siteId: v.id("sites"),
+    slug: v.string(),
   },
-  handler: async (ctx, { siteId }) => {
+  handler: async (ctx, { slug }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
+    // Look up site by slug
+    const site = await ctx.db
+      .query("sites")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+
+    if (!site) throw new Error(`Site not found: ${slug}`);
+
     // Verify user owns this site
-    const site = await ctx.db.get(siteId);
-    if (!site) throw new Error(`Site not found: ${siteId}`);
     if (site.userId !== identity.subject) {
       throw new Error("Unauthorized: You do not own this site");
     }
 
     const messages = await ctx.db
       .query("messages")
-      .withIndex("by_siteId", (q) => q.eq("siteId", siteId))
+      .withIndex("by_siteId", (q) => q.eq("siteId", site._id))
       .collect();
 
     return messages;
@@ -55,9 +61,9 @@ export const upsertMessage = mutation({
     id: v.string(),
     role: v.union(v.literal("user"), v.literal("assistant")),
     parts: v.array(v.any()),
-    siteId: v.id("sites"),
+    slug: v.string(),
   },
-  handler: async (ctx, { id, role, parts, siteId }) => {
+  handler: async (ctx, { id, role, parts, slug }) => {
     // Get user identity from Clerk JWT
     const identity = await ctx.auth.getUserIdentity();
 
@@ -65,21 +71,26 @@ export const upsertMessage = mutation({
       throw new Error("Unauthenticated: No valid session found");
     }
 
-    // Get userId and orgId from the site record since worker may not have active org
-    const site = await ctx.db.get(siteId);
+    // Look up site by slug
+    const site = await ctx.db
+      .query("sites")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+
     if (!site) {
-      throw new Error(`Site not found: ${siteId}`);
+      throw new Error(`Site not found: ${slug}`);
     }
 
     // Security: Verify the authenticated user owns this site
     if (site.userId !== identity.subject) {
       throw new Error(
-        `Unauthorized: User ${identity.subject} does not own site ${siteId}`
+        `Unauthorized: User ${identity.subject} does not own site ${slug}`
       );
     }
 
     const userId = site.userId;
     const orgId = site.orgId;
+    const siteId = site._id;
 
     // Check if message already exists
     const existing = await ctx.db
