@@ -153,16 +153,6 @@ export const updateSiteStatus = internalMutation({
   },
 });
 
-// Internal mutation to update preview URL (used by action)
-export const updatePreviewUrl = internalMutation({
-  args: {
-    siteId: v.id("sites"),
-    previewUrl: v.string(),
-  },
-  handler: async (ctx, { siteId, previewUrl }) => {
-    await ctx.db.patch(siteId, { previewUrl });
-  },
-});
 
 // Query to get site with status
 export const getSite = query({
@@ -180,6 +170,26 @@ export const getSiteBySlug = query({
       .query("sites")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first();
+  },
+});
+
+// Public query to get sandboxId from site slug (no auth required for proxy)
+export const getSandboxIdBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => {
+    const site = await ctx.db
+      .query("sites")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+
+    if (!site) {
+      return null;
+    }
+
+    return {
+      sandboxId: site.sandboxId,
+      status: site.status,
+    };
   },
 });
 
@@ -250,9 +260,10 @@ export const updateWorkerState = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
-    // Verify the user owns this site
     const site = await ctx.db.get(siteId);
-    if (!site) throw new Error(`Site ${siteId} not found`);
+    if (!site) throw new Error("Site not found");
+
+    // Verify the user owns this site
     if (site.userId !== identity.subject) {
       throw new Error("Unauthorized: You do not own this site");
     }

@@ -9,7 +9,16 @@
 	"compatibility_date": "2025-11-01",
 	"observability": {
 		"enabled": true
-	}
+	},
+	"vars": {
+		"CONVEX_URL": "https://fiery-chicken-817.convex.cloud"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "SANDBOX_CACHE",
+			"id": "a9f42438e9774312b4060562826e17a3"
+		}
+	]
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

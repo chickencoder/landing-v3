@@ -72,16 +72,10 @@ export const startSandbox = internalAction({
       console.log("[startSandbox] Creating sandbox...");
       const sandbox = await createSandbox(image, envVars);
 
-      // Store sandbox ID and get preview URL
+      // Store sandbox ID
       await ctx.runMutation(internal.sites.updateSandboxId, {
         siteId,
         sandboxId: sandbox.id,
-      });
-
-      const previewInfo = await sandbox.getPreviewLink(3000);
-      await ctx.runMutation(internal.sites.updatePreviewUrl, {
-        siteId,
-        previewUrl: previewInfo.url,
       });
 
       // Mark as started (webhook will also update this when Daytona confirms)
@@ -92,7 +86,6 @@ export const startSandbox = internalAction({
 
       console.log("[startSandbox] Completed", {
         sandboxId: sandbox.id,
-        previewUrl: previewInfo.url,
       });
 
       return {

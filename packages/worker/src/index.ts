@@ -330,7 +330,7 @@ async function updateAssistantMessage(
       id: messageId,
       role: "assistant",
       parts: parts,
-      siteId: siteId,
+      siteId,
     });
   } catch (error) {
     log("error", "Failed to update assistant message", {
@@ -359,7 +359,7 @@ async function processStreamingSession() {
     if (process.env.SESSION_ID) {
       try {
         const existingMessages = await client.query(
-          api.messages.getMessagesBySiteId,
+          api.messages.getMessagesBySite,
           { siteId }
         );
 
@@ -576,7 +576,7 @@ async function processStreamingSession() {
 
           try {
             await client.mutation(api.messages.updateSessionId, {
-              siteId: siteId,
+              siteId,
               sessionId: message.session_id,
             });
             log("info", "Saved Claude session ID to site", {

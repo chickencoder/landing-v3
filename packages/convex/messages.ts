@@ -2,23 +2,18 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
 /**
- * Get all messages for a site
+ * Get all messages for a site by siteId
  */
 export const getMessagesBySite = query({
   args: {
-    slug: v.string(),
+    siteId: v.id("sites"),
   },
-  handler: async (ctx, { slug }) => {
+  handler: async (ctx, { siteId }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
-    // Look up site by slug
-    const site = await ctx.db
-      .query("sites")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first();
-
-    if (!site) throw new Error(`Site not found: ${slug}`);
+    const site = await ctx.db.get(siteId);
+    if (!site) throw new Error("Site not found");
 
     // Verify user owns this site
     if (site.userId !== identity.subject) {
@@ -27,7 +22,7 @@ export const getMessagesBySite = query({
 
     const messages = await ctx.db
       .query("messages")
-      .withIndex("by_siteId", (q) => q.eq("siteId", site._id))
+      .withIndex("by_siteId", (q) => q.eq("siteId", siteId))
       .collect();
 
     return messages;
@@ -35,7 +30,7 @@ export const getMessagesBySite = query({
 });
 
 /**
- * Get the latest user message for a site
+ * Get the latest user message for a site by siteId
  */
 export const getLatestUserMessage = query({
   args: {
@@ -61,9 +56,9 @@ export const upsertMessage = mutation({
     id: v.string(),
     role: v.union(v.literal("user"), v.literal("assistant")),
     parts: v.array(v.any()),
-    slug: v.string(),
+    siteId: v.id("sites"),
   },
-  handler: async (ctx, { id, role, parts, slug }) => {
+  handler: async (ctx, { id, role, parts, siteId }) => {
     // Get user identity from Clerk JWT
     const identity = await ctx.auth.getUserIdentity();
 
@@ -71,26 +66,20 @@ export const upsertMessage = mutation({
       throw new Error("Unauthenticated: No valid session found");
     }
 
-    // Look up site by slug
-    const site = await ctx.db
-      .query("sites")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first();
-
+    const site = await ctx.db.get(siteId);
     if (!site) {
-      throw new Error(`Site not found: ${slug}`);
+      throw new Error("Site not found");
     }
 
     // Security: Verify the authenticated user owns this site
     if (site.userId !== identity.subject) {
       throw new Error(
-        `Unauthorized: User ${identity.subject} does not own site ${slug}`
+        `Unauthorized: User ${identity.subject} does not own this site`
       );
     }
 
     const userId = site.userId;
     const orgId = site.orgId;
-    const siteId = site._id;
 
     // Check if message already exists
     const existing = await ctx.db

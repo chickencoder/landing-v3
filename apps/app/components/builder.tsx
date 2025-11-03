@@ -39,17 +39,17 @@ import { useEffect } from "react";
 
 export function Builder({
   slug,
-  preloadedMessagesQuery,
+  preloadedSiteQuery,
 }: {
   slug: string;
-  preloadedMessagesQuery: Preloaded<typeof api.messages.getMessagesBySite>;
+  preloadedSiteQuery: Preloaded<typeof api.sites.getSiteBySlug>;
 }) {
   const { isAuthenticated } = useConvexAuth();
   const { user } = useUser();
-  const messages = usePreloadedQuery(preloadedMessagesQuery);
-  const site = useQuery(
-    api.sites.getSiteBySlug,
-    isAuthenticated ? { slug } : "skip"
+  const site = usePreloadedQuery(preloadedSiteQuery);
+  const messages = useQuery(
+    api.messages.getMessagesBySite,
+    site?._id ? { siteId: site._id } : "skip"
   );
   const sendMessage = useMutation(api.messages.upsertMessage);
   const heartbeat = useMutation(api.presence.heartbeat);
@@ -95,9 +95,9 @@ export function Builder({
     };
   }, [slug, heartbeat, leave, isAuthenticated]);
 
-  const agentMessageLength = messages.filter(
+  const agentMessageLength = messages?.filter(
     (message: any) => message.role === "assistant"
-  ).length;
+  ).length ?? 0;
 
   const currentUser = user
     ? {
@@ -108,14 +108,14 @@ export function Builder({
 
   const handleSubmit = async (message: PromptInputMessage) => {
     const trimmedText = message.text?.trim();
-    if (!trimmedText) return;
+    if (!trimmedText || !site?._id) return;
 
     try {
       await sendMessage({
         id: crypto.randomUUID(),
         role: "user",
         parts: [{ type: "text", text: trimmedText }],
-        slug,
+        siteId: site._id,
       });
     } catch (error) {
       console.error("[message] Failed to send message:", error);
@@ -133,9 +133,11 @@ export function Builder({
     return "Loading workspace...";
   };
 
+  // Compute preview URL from slug
+  const previewUrl = site?.slug ? `https://${site.slug}.landing.local` : "";
+
   const shouldShowLoadingOverlay =
     site?.status !== "started" ||
-    !site?.previewUrl ||
     !site?.devServer?.isRunning;
 
   return (
@@ -146,7 +148,7 @@ export function Builder({
           <Conversation className="w-full">
             <ConversationContent className="pt-0 px-2">
               <MessageRenderer
-                messages={messages as any}
+                messages={messages ?? []}
                 currentUser={currentUser}
               />
               {agentMessageLength === 0 && <OptimisticAgentMessage />}
@@ -173,7 +175,7 @@ export function Builder({
       {/* Right Column - Web Preview */}
       <div className="flex-1 relative">
         <WebPreview
-          defaultUrl={site?.previewUrl || ""}
+          defaultUrl={previewUrl}
           className="overflow-hidden h-full"
         >
           <WebPreviewNavigation>

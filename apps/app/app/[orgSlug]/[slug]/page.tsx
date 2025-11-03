@@ -13,8 +13,9 @@ export default async function BuilderPage({
 
   const token = await getToken({ template: "convex" });
 
-  const preloadedMessagesQuery = await preloadQuery(
-    api.messages.getMessagesBySite,
+  // Preload the site data
+  const preloadedSiteQuery = await preloadQuery(
+    api.sites.getSiteBySlug,
     { slug },
     { token: token ?? undefined }
   );
@@ -22,7 +23,7 @@ export default async function BuilderPage({
   return (
     <Builder
       slug={slug}
-      preloadedMessagesQuery={preloadedMessagesQuery}
+      preloadedSiteQuery={preloadedSiteQuery}
     />
   );
 }
