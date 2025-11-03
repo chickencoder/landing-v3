@@ -103,6 +103,24 @@ export const updateSiteStatus = internalMutation({
     timestamp: v.optional(v.string()),
   },
   handler: async (ctx, { siteId, status, timestamp }) => {
+    // Check if this update is older than the last processed webhook
+    if (timestamp) {
+      const site = await ctx.db.get(siteId);
+      if (site?.lastWebhookTimestamp) {
+        const incomingTime = new Date(timestamp).getTime();
+        const lastProcessedTime = new Date(site.lastWebhookTimestamp).getTime();
+
+        if (incomingTime <= lastProcessedTime) {
+          console.log("[updateSiteStatus] Ignoring out-of-order webhook:", {
+            siteId,
+            incomingTimestamp: timestamp,
+            lastProcessedTimestamp: site.lastWebhookTimestamp,
+          });
+          return; // Don't update if this webhook is older
+        }
+      }
+    }
+
     await ctx.db.patch(siteId, {
       status,
       ...(timestamp && { lastWebhookTimestamp: timestamp }),

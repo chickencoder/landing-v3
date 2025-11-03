@@ -24,7 +24,7 @@ export default defineConfig({
   platform: "node",
   outDir: "dist",
   outExtension: () => ({ js: ".js" }),
-  // Bundle all dependencies except Node.js built-ins and Anthropic SDK packages
+  // Bundle all dependencies except Node.js built-ins
   external: [
     // Node.js built-ins
     "fs",
@@ -50,12 +50,9 @@ export default defineConfig({
     "console",
     "timers",
     "dns",
-    // External modules that need access to their original file structure
-    "@anthropic-ai/claude-agent-sdk",
-    "@anthropic-ai/sdk",
   ],
-  // Bundle most dependencies but exclude those that need to remain external
-  noExternal: [/^(?!@anthropic-ai\/(claude-agent-sdk|sdk)$).*/],
+  // Bundle all dependencies including Anthropic SDKs
+  noExternal: [/.*/],
   // Add shebang for executable
   banner: {
     js: "#!/usr/bin/env node\n",

@@ -44,11 +44,12 @@ export function buildSandboxImage(): Image {
     .runCommands(
       // Install essential utilities, ripgrep (required by Claude Code), supervisor, and tmux
       "apt-get update && apt-get install -y curl coreutils procps git ripgrep supervisor tmux && rm -rf /var/lib/apt/lists/*",
-      // Install Anthropic packages globally: claude-code (CLI), claude-agent-sdk (SDK), and sdk (API client)
-      "npm install -g @anthropic-ai/claude-code @anthropic-ai/claude-agent-sdk @anthropic-ai/sdk",
+      // Install Claude Code using official install script and make it globally accessible
+      "curl -fsSL https://claude.ai/install.sh | bash",
+      "cp /root/.local/bin/claude /usr/local/bin/claude",
       // Create landing user with home directory
       "useradd -m -d /home/landing -s /bin/bash landing",
-      "VERSION=8",
+      "VERSION=10",
     )
     .dockerfileCommands(["USER landing"])
     .runCommands(
@@ -56,8 +57,6 @@ export function buildSandboxImage(): Image {
       "git clone https://github.com/chickencoder/landing-starter /home/landing/project",
       // Install project dependencies
       "cd /home/landing/project && npm install",
-      // Pre-install worker SDK dependencies in project directory
-      "cd /home/landing/project && npm install --no-save @anthropic-ai/claude-agent-sdk@^0.1.28 @anthropic-ai/sdk@^0.68.0",
     )
     .dockerfileCommands(["USER root"])
     .runCommands(

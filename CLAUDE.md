@@ -134,13 +134,15 @@ This command:
 When `startSandbox` is called (from `packages/convex/sandbox.ts`):
 
 1. **Generates Clerk session token** for the worker to authenticate with Convex
-2. **Builds Daytona image** with Node.js 22 and Anthropic SDKs pre-installed
+2. **Builds Daytona image** with Node.js 22 and Claude Code CLI installed via official install script
 3. **Creates sandbox** with environment variables:
    - `CONVEX_URL`: Convex deployment URL
    - `SITE_ID`: ID of the site this sandbox is for
    - `CLERK_TOKEN`: Time-limited JWT for authentication
-4. **Uploads worker** by calling `getWorkerSource()` and uploading to `/home/landing/worker.js`
-5. **Starts worker** by executing `node /home/landing/worker.js`
+4. **Uploads worker** by calling `getWorkerSource()` and uploading to `/home/landing/project/worker.js`
+   - Worker is a **single bundled file** with all dependencies (including Anthropic SDKs) included
+   - No node_modules dependencies - survives `npm install` runs in the project
+5. **Starts worker** by executing `node /home/landing/project/worker.js`
 
 #### 3. Worker Runtime (packages/sandbox/src/index.ts)
 
@@ -164,7 +166,7 @@ NOT dynamically:
 const { getWorkerSource } = await import("./lib/workerBundle");
 ```
 
-**Worker Bundle Size**: The generated `workerBundle.ts` is ~340KB because it includes the entire bundled Convex client and Anthropic SDK. This is necessary for the worker to run in the isolated sandbox environment.
+**Worker Bundle Size**: The worker bundle includes all dependencies (Convex client, Anthropic Agent SDK, etc.) to ensure it can run without any node_modules dependencies. This makes the worker resilient to `npm install` operations in the project directory.
 
 **Token Expiration**: Clerk tokens are generated with a 1-hour lifetime. The worker validates token expiration on startup and exits if the token is expired or expiring soon (<5 minutes).
 

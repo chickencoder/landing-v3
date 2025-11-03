@@ -163,19 +163,14 @@ export const checkSitePresence = internalMutation({
         return;
       }
 
-      // Check if worker is streaming or has recent heartbeat
-      const workerActive =
-        site.worker?.isStreaming ||
-        (site.worker?.lastHeartbeat &&
-          now - site.worker.lastHeartbeat < HEARTBEAT_TIMEOUT_MS);
-
-      if (workerActive) {
+      // Only skip shutdown if worker is actively streaming a response
+      // Don't skip just because worker is alive (sending heartbeats) - that's always true
+      if (site.worker?.isStreaming) {
         console.log(
-          "[presence:check] No users but worker is active, skipping shutdown",
+          "[presence:check] No users but worker is streaming, skipping shutdown",
           {
             siteId,
-            workerStreaming: site.worker?.isStreaming,
-            workerLastHeartbeat: site.worker?.lastHeartbeat,
+            workerStreaming: true,
           }
         );
         return;

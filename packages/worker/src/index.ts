@@ -166,7 +166,7 @@ const heartbeatInterval = setInterval(async () => {
       siteId,
       worker: {
         lastHeartbeat: now,
-        isStreaming: streamingState.isStreamingActive,
+        isStreaming: streamingState.isActivelyStreaming,
       },
       devServer: {
         isRunning: isDevServerRunning,
@@ -175,7 +175,7 @@ const heartbeatInterval = setInterval(async () => {
     });
 
     log("info", "Worker heartbeat sent", {
-      isStreaming: streamingState.isStreamingActive,
+      isStreaming: streamingState.isActivelyStreaming,
       devServerRunning: isDevServerRunning,
     });
   } catch (error) {
@@ -231,6 +231,7 @@ interface StreamingState {
   processedMessageIds: Set<string>; // Track completed messages
   messageQueue: UserMessage[];
   isStreamingActive: boolean;
+  isActivelyStreaming: boolean; // True when Claude is actively responding to a message
   sessionId: string | null;
   currentProcessingMessage: UserMessage | null;
   messageQueueResolver: ((message: UserMessage | null) => void) | null;
@@ -242,6 +243,7 @@ const streamingState: StreamingState = {
   processedMessageIds: new Set(),
   messageQueue: [],
   isStreamingActive: false,
+  isActivelyStreaming: false,
   sessionId: null,
   currentProcessingMessage: null,
   messageQueueResolver: null,
@@ -383,6 +385,7 @@ async function processStreamingSession() {
       permissionMode: "bypassPermissions",
       maxTurns: 50,
       model: "claude-sonnet-4-5-20250929",
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
       systemPrompt: {
         type: "preset",
         preset: "claude_code",
@@ -443,6 +446,7 @@ async function processStreamingSession() {
           if (!currentAssistantMessageId) {
             currentAssistantMessageId = crypto.randomUUID();
             streamingState.currentProcessingMessage = null;
+            streamingState.isActivelyStreaming = true;
             log("info", "Starting new assistant message", {
               messageId: currentAssistantMessageId.substring(0, 8) + "...",
             });
@@ -562,6 +566,9 @@ async function processStreamingSession() {
 
           currentAssistantMessageId = null;
           currentMessageChunks = [];
+          streamingState.isActivelyStreaming = false;
+
+          log("info", "Reset streaming flag to false");
         }
       } else if (message.type === "system") {
         if (message.subtype === "init" && message.session_id) {

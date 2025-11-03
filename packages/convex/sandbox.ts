@@ -175,22 +175,11 @@ export const stopSandbox = internalAction({
         console.log("[stopSandbox] Worker is streaming, aborting shutdown", {
           siteId,
         });
-        return { success: false, reason: "worker_streaming" };
-      }
-
-      // Safety check: Don't stop if worker heartbeat is recent
-      const now = Date.now();
-      const WORKER_TIMEOUT_MS = 60000; // 60 seconds
-      if (
-        site.worker?.lastHeartbeat &&
-        now - site.worker.lastHeartbeat < WORKER_TIMEOUT_MS
-      ) {
-        console.log("[stopSandbox] Worker heartbeat is recent, aborting shutdown", {
+        // Clear scheduled shutdown so it can be rescheduled when streaming finishes
+        await ctx.runMutation(internal.sites.clearScheduledShutdown, {
           siteId,
-          lastHeartbeat: site.worker.lastHeartbeat,
-          age: now - site.worker.lastHeartbeat,
         });
-        return { success: false, reason: "worker_active" };
+        return { success: false, reason: "worker_streaming" };
       }
 
       // Stop the sandbox
