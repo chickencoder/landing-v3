@@ -7,9 +7,11 @@ import { Card, CardHeader, CardTitle } from "./ui/card";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Skeleton } from "./ui/skeleton";
+import { useAuth } from "@clerk/nextjs";
 
 export function SiteGrid() {
-  const sites = useQuery(api.sites.listSites);
+  const { isLoaded } = useAuth();
+  const sites = useQuery(api.sites.listSites, {}, { skip: !isLoaded });
   const { orgSlug } = useParams<{ orgSlug: string }>();
 
   return (
