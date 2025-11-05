@@ -18,7 +18,7 @@ import { FormEvent, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export function NewSiteForm({ className }: { className?: string }) {
-  const createSite = useMutation(api.sites.create);
+  const createSite = useMutation(api.sites.createSite);
   const router = useRouter();
   const params = useParams();
   const [isLoading, setIsLoading] = useState(false);

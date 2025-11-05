@@ -8,7 +8,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { generateSlug } from "./lib/slugGenerator";
 
-export const create = mutation({
+export const createSite = mutation({
   args: {
     message: v.optional(v.string()),
   },
@@ -80,7 +80,7 @@ export const create = mutation({
   },
 });
 
-export const list = query({
+export const listSites = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
 
@@ -175,14 +175,6 @@ export const updateSiteStatus = internalMutation({
       status,
       ...(timestamp && { lastWebhookTimestamp: timestamp }),
     });
-  },
-});
-
-// Query to get site with status
-export const getSite = query({
-  args: { siteId: v.id("sites") },
-  handler: async (ctx, { siteId }) => {
-    return await ctx.db.get(siteId);
   },
 });
 
@@ -323,5 +315,54 @@ export const updateWorkerStateInternal = internalMutation({
     if (devServer) updates.devServer = devServer;
 
     await ctx.db.patch(siteId, updates);
+  },
+});
+
+/**
+ * Update the session ID for a site
+ */
+export const updateSessionId = mutation({
+  args: {
+    siteId: v.id("sites"),
+    sessionId: v.string(),
+  },
+  handler: async (ctx, { siteId, sessionId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const site = await ctx.db.get(siteId);
+    if (!site) throw new Error("Site not found");
+
+    // Verify the authenticated user owns this site
+    if (site.userId !== identity.subject) {
+      throw new Error("Unauthorized: You do not own this site");
+    }
+
+    await ctx.db.patch(siteId, {
+      sessionId,
+    });
+  },
+});
+
+/**
+ * Get session ID for a site
+ */
+export const getSessionId = query({
+  args: {
+    siteId: v.id("sites"),
+  },
+  handler: async (ctx, { siteId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const site = await ctx.db.get(siteId);
+    if (!site) throw new Error("Site not found");
+
+    // Verify the authenticated user owns this site
+    if (site.userId !== identity.subject) {
+      throw new Error("Unauthorized: You do not own this site");
+    }
+
+    return site?.sessionId || null;
   },
 });

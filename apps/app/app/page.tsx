@@ -15,7 +15,7 @@ export default function RootPage() {
 
   const organizations = useQuery(
     api.organizations.getUserOrganizations,
-    userId ? { userId } : "skip",
+    userId ? {} : "skip",
   );
 
   if (!userId && authLoaded) {

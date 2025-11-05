@@ -270,20 +270,33 @@ http.route({
       }
 
       // Map Daytona states to our site status
-      // Daytona states: "pending_build", "building_snapshot", "starting", "started", "stopped", "error", etc.
+      // Complete Daytona state enum:
+      // - creating, restoring, pending_build, building_snapshot, pulling_snapshot, starting (setup/boot phase)
+      // - started (running)
+      // - stopping, stopped (paused)
+      // - destroying, destroyed, archiving, archived (cleanup)
+      // - error, build_failed, unknown (error states)
       let status: "creating" | "started" | "stopped" | "error" | "deleted" | null = null;
 
       if (currentState === "started") {
         status = "started";
-      } else if (currentState === "stopped") {
+      } else if (currentState === "stopped" || currentState === "stopping") {
         status = "stopped";
-      } else if (currentState === "deleted") {
+      } else if (currentState === "destroyed" || currentState === "archived") {
         status = "deleted";
-      } else if (currentState === "error" || currentState.includes("error")) {
+      } else if (currentState === "error" || currentState === "build_failed" || currentState === "unknown") {
         status = "error";
-      } else if (currentState === "starting" || currentState === "pending_build" || currentState === "building_snapshot") {
+      } else if (
+        currentState === "creating" ||
+        currentState === "restoring" ||
+        currentState === "starting" ||
+        currentState === "pending_build" ||
+        currentState === "building_snapshot" ||
+        currentState === "pulling_snapshot"
+      ) {
         status = "creating";
       }
+      // Note: "destroying" and "archiving" are transient states - we wait for final "destroyed"/"archived"
 
       // Update site status if we have a mapping
       if (status) {

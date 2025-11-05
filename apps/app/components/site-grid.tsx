@@ -9,7 +9,7 @@ import Link from "next/link";
 import { Skeleton } from "./ui/skeleton";
 
 export function SiteGrid() {
-  const sites = useQuery(api.sites.list);
+  const sites = useQuery(api.sites.listSites);
   const { orgSlug } = useParams<{ orgSlug: string }>();
 
   return (

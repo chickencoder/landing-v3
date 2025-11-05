@@ -51,40 +51,19 @@ export const deleteOrganization = internalMutation({
   },
 });
 
-export const getOrganization = query({
-  args: {
-    orgId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("organizations")
-      .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
-      .first();
-  },
-});
-
 export const getUserOrganizations = query({
-  args: {
-    userId: v.string(),
-  },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const userId = identity.subject;
+
     // For now, return organizations created by the user
     // TODO: When we add organizationMemberships table, query that instead
     return await ctx.db
       .query("organizations")
-      .filter((q) => q.eq(q.field("createdBy"), args.userId))
+      .filter((q) => q.eq(q.field("createdBy"), userId))
       .collect();
-  },
-});
-
-export const getOrganizationBySlug = query({
-  args: {
-    slug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .first();
   },
 });

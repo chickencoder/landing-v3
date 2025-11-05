@@ -595,7 +595,7 @@ async function processStreamingSession() {
           streamingState.sessionId = message.session_id;
 
           try {
-            await client.mutation(api.messages.updateSessionId, {
+            await client.mutation(api.sites.updateSessionId, {
               siteId,
               sessionId: message.session_id,
             });

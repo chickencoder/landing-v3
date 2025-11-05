@@ -64,18 +64,6 @@ export const getUser = internalQuery({
   },
 });
 
-export const getUserPublic = query({
-  args: {
-    userId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("users")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .first();
-  },
-});
-
 export const updatePrimaryOrg = internalMutation({
   args: {
     userId: v.string(),
