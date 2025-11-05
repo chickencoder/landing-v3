@@ -50,7 +50,9 @@ export default defineSchema({
         lastChecked: v.number(),
       })
     ),
-  }).index("by_slug", ["slug"]),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_orgId", ["orgId"]),
 
   messages: defineTable({
     id: v.string(),

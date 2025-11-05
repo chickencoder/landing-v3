@@ -15,7 +15,7 @@ export default clerkMiddleware(
         "/:slug/(.*)", // Wildcard match for optional trailing path segments
       ],
     },
-  }
+  },
 );
 
 export const config = {

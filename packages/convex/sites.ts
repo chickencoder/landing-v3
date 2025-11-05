@@ -80,6 +80,31 @@ export const create = mutation({
   },
 });
 
+export const list = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+
+    if (!identity) {
+      throw new Error("Unauthenticated");
+    }
+
+    const userId = identity.subject;
+    const orgId = identity.org_id;
+
+    if (!orgId) {
+      throw new Error("No active organization");
+    }
+
+    // Get all sites for the user's organization
+    const sites = await ctx.db
+      .query("sites")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
+
+    return sites;
+  },
+});
+
 // Internal query to get site by ID (used by action)
 export const getSiteById = internalQuery({
   args: { siteId: v.id("sites") },
@@ -152,7 +177,6 @@ export const updateSiteStatus = internalMutation({
     });
   },
 });
-
 
 // Query to get site with status
 export const getSite = query({
@@ -246,13 +270,13 @@ export const updateWorkerState = mutation({
       v.object({
         lastHeartbeat: v.number(),
         isStreaming: v.boolean(),
-      })
+      }),
     ),
     devServer: v.optional(
       v.object({
         isRunning: v.boolean(),
         lastChecked: v.number(),
-      })
+      }),
     ),
   },
   handler: async (ctx, { siteId, worker, devServer }) => {
@@ -284,13 +308,13 @@ export const updateWorkerStateInternal = internalMutation({
       v.object({
         lastHeartbeat: v.number(),
         isStreaming: v.boolean(),
-      })
+      }),
     ),
     devServer: v.optional(
       v.object({
         isRunning: v.boolean(),
         lastChecked: v.number(),
-      })
+      }),
     ),
   },
   handler: async (ctx, { siteId, worker, devServer }) => {

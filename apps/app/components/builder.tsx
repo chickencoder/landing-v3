@@ -1,104 +1,31 @@
 "use client";
 
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
-  type PromptInputMessage,
-} from "@/components/ai-elements/prompt-input";
-import {
-  WebPreview,
-  WebPreviewBody,
-  WebPreviewNavigation,
-  WebPreviewUrl,
-} from "@/components/ai-elements/web-preview";
-import {
-  MessageRenderer,
-  OptimisticAgentMessage,
-} from "@/components/message-renderer";
+import { BuilderConversation } from "@/components/builder-conversation";
+import { BuilderPreview } from "@/components/builder-preview";
+import { useSiteMessages } from "@/hooks/use-site-messages";
+import { useSitePresence } from "@/hooks/use-site-presence";
+import { useSiteStatus } from "@/hooks/use-site-status";
 import { useUser } from "@clerk/nextjs";
 import { api } from "@repo/convex/_generated/api";
-import type { Id } from "@repo/convex/_generated/dataModel";
-import {
-  Preloaded,
-  useConvexAuth,
-  useMutation,
-  usePreloadedQuery,
-  useQuery,
-} from "convex/react";
-import { ArrowUp, Loader } from "lucide-react";
-import { useEffect } from "react";
+import { useQuery } from "convex/react";
 
-export function Builder({
-  slug,
-  preloadedSiteQuery,
-}: {
-  slug: string;
-  preloadedSiteQuery: Preloaded<typeof api.sites.getSiteBySlug>;
-}) {
-  const { isAuthenticated } = useConvexAuth();
+export function Builder({ slug }: { slug: string }) {
   const { user } = useUser();
-  const site = usePreloadedQuery(preloadedSiteQuery);
-  const messages = useQuery(
-    api.messages.getMessagesBySite,
-    site?._id ? { siteId: site._id } : "skip"
+  const isAuthenticated = !!user;
+  const data = useQuery(api.messages.getMessagesBySite, { slug });
+  const site = data?.site;
+  const messages = data?.messages;
+
+  // Custom hooks for state management
+  useSitePresence(slug, isAuthenticated);
+  const { agentMessageLength, handleSubmit } = useSiteMessages(
+    site?._id,
+    messages,
   );
-  const sendMessage = useMutation(api.messages.upsertMessage);
-  const heartbeat = useMutation(api.presence.heartbeat);
-  const leave = useMutation(api.presence.leave);
+  const { previewUrl, shouldShowLoadingOverlay, loadingMessage } =
+    useSiteStatus(site);
 
-  // Presence tracking with instant exit detection
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const handleError = (context: string) => (err: unknown) =>
-      console.error(`[presence] ${context} failed:`, err);
-
-    // Send initial heartbeat
-    heartbeat({ slug }).catch(handleError("Initial heartbeat"));
-
-    // Periodic heartbeat while tab is visible
-    const interval = setInterval(() => {
-      if (!document.hidden) {
-        heartbeat({ slug }).catch(handleError("Heartbeat"));
-      }
-    }, 10_000);
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        leave({ slug }).catch(handleError("Leave (visibility)"));
-      } else {
-        heartbeat({ slug }).catch(handleError("Heartbeat (visibility)"));
-      }
-    };
-
-    const handleBeforeUnload = () => {
-      leave({ slug }).catch(handleError("Leave (beforeunload)"));
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      leave({ slug }).catch(handleError("Leave (unmount)"));
-    };
-  }, [slug, heartbeat, leave, isAuthenticated]);
-
-  const agentMessageLength = messages?.filter(
-    (message: any) => message.role === "assistant"
-  ).length ?? 0;
-
+  // Compute current user info
   const currentUser = user
     ? {
         name: user.fullName || user.username || "User",
@@ -106,94 +33,19 @@ export function Builder({
       }
     : null;
 
-  const handleSubmit = async (message: PromptInputMessage) => {
-    const trimmedText = message.text?.trim();
-    if (!trimmedText || !site?._id) return;
-
-    try {
-      await sendMessage({
-        id: crypto.randomUUID(),
-        role: "user",
-        parts: [{ type: "text", text: trimmedText }],
-        siteId: site._id,
-      });
-    } catch (error) {
-      console.error("[message] Failed to send message:", error);
-    }
-  };
-
-  const getLoadingMessage = () => {
-    if (site?.status === "creating") return "Setting up your workspace...";
-    if (site?.status === "stopped") return "Workspace is stopped";
-    if (site?.status === "error") return "Error loading workspace";
-    if (site?.status === "deleted") return "Workspace has been deleted";
-    if (site?.status === "started" && !site?.devServer?.isRunning) {
-      return "Starting dev server...";
-    }
-    return "Loading workspace...";
-  };
-
-  // Compute preview URL from slug
-  const previewUrl = site?.slug ? `https://${site.slug}.landing.local` : "";
-
-  const shouldShowLoadingOverlay =
-    site?.status !== "started" ||
-    !site?.devServer?.isRunning;
-
   return (
-    <div className="flex h-screen p-2 gap-2">
-      {/* Left Column - Conversation Thread */}
-      <div className="flex w-[24rem] flex-col">
-        <div className="flex flex-1 flex-col items-center overflow-hidden">
-          <Conversation className="w-full">
-            <ConversationContent className="pt-0 px-2">
-              <MessageRenderer
-                messages={messages ?? []}
-                currentUser={currentUser}
-              />
-              {agentMessageLength === 0 && <OptimisticAgentMessage />}
-            </ConversationContent>
-            <ConversationScrollButton />
-          </Conversation>
-        </div>
-
-        <div className="flex justify-center">
-          <PromptInput onSubmit={handleSubmit} className="bg-card">
-            <PromptInputBody>
-              <PromptInputTextarea placeholder="Describe changes to your site..." />
-            </PromptInputBody>
-            <PromptInputFooter>
-              <PromptInputTools />
-              <PromptInputSubmit variant="secondary">
-                <ArrowUp />
-              </PromptInputSubmit>
-            </PromptInputFooter>
-          </PromptInput>
-        </div>
-      </div>
-
-      {/* Right Column - Web Preview */}
-      <div className="flex-1 relative">
-        <WebPreview
-          defaultUrl={previewUrl}
-          className="overflow-hidden h-full"
-        >
-          <WebPreviewNavigation>
-            <WebPreviewUrl />
-          </WebPreviewNavigation>
-          <WebPreviewBody />
-        </WebPreview>
-
-        {/* Loading overlay - smoothly transitions between states */}
-        {shouldShowLoadingOverlay && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-lg">
-            <div className="flex flex-col items-center gap-2">
-              <Loader className="size-4 animate-spin" />
-              <p className="text-muted-foreground">{getLoadingMessage()}</p>
-            </div>
-          </div>
-        )}
-      </div>
+    <div className="flex h-dvh p-2 gap-2">
+      <BuilderConversation
+        messages={messages}
+        currentUser={currentUser}
+        agentMessageLength={agentMessageLength}
+        onSubmit={handleSubmit}
+      />
+      <BuilderPreview
+        previewUrl={previewUrl}
+        shouldShowLoadingOverlay={shouldShowLoadingOverlay}
+        loadingMessage={loadingMessage}
+      />
     </div>
   );
 }

@@ -2,9 +2,42 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
 /**
- * Get all messages for a site by siteId
+ * Get all messages for a site by slug
  */
 export const getMessagesBySite = query({
+  args: {
+    slug: v.string(),
+  },
+  handler: async (ctx, { slug }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    // Look up site by slug
+    const site = await ctx.db
+      .query("sites")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+
+    if (!site) throw new Error(`Site not found: ${slug}`);
+
+    // Verify user owns this site
+    if (site.userId !== identity.subject) {
+      throw new Error("Unauthorized: You do not own this site");
+    }
+
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_siteId", (q) => q.eq("siteId", site._id))
+      .collect();
+
+    return { site, messages };
+  },
+});
+
+/**
+ * Get all messages for a site by siteId (internal use for worker)
+ */
+export const getMessagesBySiteId = query({
   args: {
     siteId: v.id("sites"),
   },

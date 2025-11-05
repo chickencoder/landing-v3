@@ -49,7 +49,7 @@ export function buildSandboxImage(): Image {
       "cp /root/.local/bin/claude /usr/local/bin/claude",
       // Create landing user with home directory
       "useradd -m -d /home/landing -s /bin/bash landing",
-      "VERSION=10",
+      "VERSION=12",
     )
     .dockerfileCommands(["USER landing"])
     .runCommands(

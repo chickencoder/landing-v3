@@ -152,8 +152,28 @@ try {
 
 client.setAuth(() => Promise.resolve(clerkToken));
 
-// Wait for client to establish connection
-await new Promise((resolve) => setTimeout(resolve, 1000));
+// Wait for client to establish connection by attempting a simple query
+log("info", "Waiting for Convex client connection...");
+let connectionAttempts = 0;
+const maxAttempts = 10;
+while (connectionAttempts < maxAttempts) {
+  try {
+    await client.query(api.messages.getMessagesBySiteId, { siteId });
+    log("info", "Convex client connected successfully");
+    break;
+  } catch (error) {
+    connectionAttempts++;
+    if (connectionAttempts >= maxAttempts) {
+      log("error", "Failed to connect to Convex after max attempts", {
+        attempts: connectionAttempts,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      process.exit(1);
+    }
+    log("info", `Convex connection attempt ${connectionAttempts} failed, retrying...`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
 
 // Start worker heartbeat
 const HEARTBEAT_INTERVAL_MS = 10000; // 10 seconds
@@ -359,7 +379,7 @@ async function processStreamingSession() {
     if (process.env.SESSION_ID) {
       try {
         const existingMessages = await client.query(
-          api.messages.getMessagesBySite,
+          api.messages.getMessagesBySiteId,
           { siteId }
         );
 
@@ -686,7 +706,7 @@ async function processUserMessage(userMessage: UserMessage | null) {
  */
 async function isMessageProcessed(userMessageId: string): Promise<boolean> {
   try {
-    const allMessages = await client.query(api.messages.getMessagesBySite, {
+    const allMessages = await client.query(api.messages.getMessagesBySiteId, {
       siteId,
     });
 

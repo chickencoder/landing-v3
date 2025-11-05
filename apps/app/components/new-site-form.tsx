@@ -14,9 +14,10 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "./ai-elements/prompt-input";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
+import { cn } from "@/lib/utils";
 
-export function NewSiteForm() {
+export function NewSiteForm({ className }: { className?: string }) {
   const createSite = useMutation(api.sites.create);
   const router = useRouter();
   const params = useParams();
@@ -24,7 +25,7 @@ export function NewSiteForm() {
 
   const handleSubmit = async (
     message: PromptInputMessage,
-    event: FormEvent<HTMLFormElement>
+    event: FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
     if (!message.text?.trim()) return;
@@ -36,32 +37,30 @@ export function NewSiteForm() {
     router.push(`/${params.orgSlug}/${slug}`);
   };
 
-  useEffect(() => {
-    console.log({ isLoading });
-  }, [isLoading]);
-
   return (
-    <PromptInputProvider>
-      <PromptInput
-        globalDrop
-        multiple
-        resetOnSubmit={false}
-        onSubmit={handleSubmit}
-        className="bg-card"
-      >
-        <PromptInputBody>
-          <PromptInputTextarea />
-        </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools>
-            <PromptInputActionMenu></PromptInputActionMenu>
-          </PromptInputTools>
-          <PromptInputSubmit
-            variant="secondary"
-            status={isLoading ? "submitted" : "ready"}
-          />
-        </PromptInputFooter>
-      </PromptInput>
-    </PromptInputProvider>
+    <div className={cn("max-w-2xl mx-auto", className)}>
+      <PromptInputProvider>
+        <PromptInput
+          globalDrop
+          multiple
+          resetOnSubmit={false}
+          onSubmit={handleSubmit}
+          className="bg-card"
+        >
+          <PromptInputBody>
+            <PromptInputTextarea />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputTools>
+              <PromptInputActionMenu></PromptInputActionMenu>
+            </PromptInputTools>
+            <PromptInputSubmit
+              variant="secondary"
+              status={isLoading ? "submitted" : "ready"}
+            />
+          </PromptInputFooter>
+        </PromptInput>
+      </PromptInputProvider>
+    </div>
   );
 }
